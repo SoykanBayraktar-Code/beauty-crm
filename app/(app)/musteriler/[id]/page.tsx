@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { IconArrowLeft, IconEdit } from "@tabler/icons-react";
 import { createClient } from "@/lib/supabase/server";
+import { requireMembership } from "@/lib/auth/dal";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -15,6 +16,10 @@ import { TakePaymentDialog } from "@/components/customers/take-payment-dialog";
 import { GrantConsentDialog } from "@/components/customers/grant-consent-dialog";
 import { AnamnesisForm } from "@/components/customers/anamnesis-form";
 import { ClinicalRecordDialog } from "@/components/customers/clinical-record-dialog";
+import {
+  ClinicalAccessManager,
+  type Grant,
+} from "@/components/customers/clinical-access-manager";
 import { PhotoUploadDialog } from "@/components/customers/photo-upload-dialog";
 import {
   PhotoGallery,
@@ -73,6 +78,8 @@ export default async function CustomerProfilePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const membership = await requireMembership();
+  const isOwner = membership.role === "owner";
   const supabase = await createClient();
 
   const { data: customer } = await supabase
@@ -100,6 +107,9 @@ export default async function CustomerProfilePage({
     { data: invProducts },
     { data: invBatches },
     { data: photoRows },
+    { data: specialistMembers },
+    { data: staffNames },
+    { data: accessGrants },
   ] = await Promise.all([
     supabase
       .from("customer_notes")
@@ -190,6 +200,18 @@ export default async function CustomerProfilePage({
       .eq("customer_id", id)
       .is("deleted_at", null)
       .order("taken_at", { ascending: false }),
+    supabase
+      .from("org_members")
+      .select("id")
+      .eq("role", "specialist")
+      .is("deleted_at", null),
+    supabase.from("staff").select("member_id, full_name").is("deleted_at", null),
+    supabase
+      .from("clinical_access_grants")
+      .select("id, grantee_id, reason, expires_at, created_at")
+      .eq("customer_id", id)
+      .is("revoked_at", null)
+      .order("created_at", { ascending: false }),
   ]);
 
   const receipts = Object.values(
@@ -260,6 +282,23 @@ export default async function CustomerProfilePage({
   }));
 
   const hasConsent = (consents ?? []).length > 0;
+
+  // Klinik erişim yetkilendirme (F-3) — uzman üye + ad eşlemesi + aktif grant'lar
+  const staffByMember = new Map<string, string>();
+  for (const s of staffNames ?? []) {
+    if (s.member_id) staffByMember.set(s.member_id, s.full_name);
+  }
+  const specialists = (specialistMembers ?? []).map((mem) => ({
+    memberId: mem.id,
+    name: staffByMember.get(mem.id) ?? "Uzman",
+  }));
+  const grants: Grant[] = (accessGrants ?? []).map((g) => ({
+    id: g.id,
+    granteeName: staffByMember.get(g.grantee_id) ?? "Uzman",
+    reason: g.reason,
+    expiresAt: g.expires_at,
+    createdAt: g.created_at,
+  }));
 
   const initials = customer.full_name.slice(0, 2).toUpperCase();
 
@@ -360,6 +399,13 @@ export default async function CustomerProfilePage({
         <TabsContent value="klinik">
           <Card>
             <CardContent className="space-y-4 py-5">
+              {isOwner ? (
+                <ClinicalAccessManager
+                  customerId={id}
+                  specialists={specialists}
+                  grants={grants}
+                />
+              ) : null}
               {(procTypes ?? []).length > 0 ? (
                 <div className="flex justify-end">
                   <ClinicalRecordDialog

@@ -173,8 +173,7 @@ export async function takePayment(
   _prev: CustomerState,
   formData: FormData,
 ): Promise<CustomerState> {
-  const m = await requireMembership();
-  const user = await getUser();
+  await requireMembership(); // yetki kapısı (org/created_by RPC içinde auth.uid()'den)
   const customerId = clean(formData.get("customer_id"));
   if (!customerId) return { error: "Müşteri gerekli." };
 
@@ -193,29 +192,19 @@ export async function takePayment(
   if (entries.length === 0) return { error: "En az bir ödeme satırı girin." };
 
   const supabase = await createClient();
-  // Çakışmasız atomik makbuz numarası (org+gün sıralı) — bkz. 0012_receipt_counter
-  const { data: receiptNo, error: rcptErr } = await supabase.rpc(
-    "next_receipt_no",
-  );
-  if (rcptErr || !receiptNo) {
-    return { error: rcptErr?.message ?? "Makbuz numarası üretilemedi." };
+  // F-7: makbuz no üretimi + satır insert'leri TEK transaction (atomik).
+  // Insert başarısızsa sayaç artışı da geri alınır → makbuz numarası boşluğu olmaz.
+  const { data: receiptNo, error } = await supabase.rpc("record_payment", {
+    p_customer_id: customerId,
+    p_type: type,
+    p_note: note,
+    p_lines: entries,
+  });
+  if (error || !receiptNo) {
+    return { error: error?.message ?? "Ödeme kaydedilemedi." };
   }
 
-  const rows = entries.map((e) => ({
-    org_id: m.org_id,
-    customer_id: customerId,
-    receipt_no: receiptNo,
-    amount: e.amount,
-    method: e.method,
-    type,
-    note,
-    created_by: user?.id ?? null,
-  }));
-
-  const { error } = await supabase.from("payments").insert(rows);
-  if (error) return { error: error.message };
-
-  const total = rows.reduce((s, r) => s + r.amount, 0);
+  const total = entries.reduce((s, e) => s + e.amount, 0);
   await logAudit("payment.take", "customer", customerId, {
     receipt_no: receiptNo,
     total,
@@ -509,4 +498,62 @@ export async function deleteTreatmentPhoto(formData: FormData) {
   if (path) await supabase.storage.from(PHOTO_BUCKET).remove([path]);
   await logAudit("photo.delete", "customer", customerId, {});
   revalidatePath(`/musteriler/${customerId}`);
+}
+
+// F-3: Klinik erişim yetkilendirme — yalnız yönetici, bir uzmana bir hastanın
+// klinik kaydına erişim açar (randevu dışı). RLS de owner-only zorlar (savunma katmanı).
+export async function grantClinicalAccess(
+  _prev: CustomerState,
+  formData: FormData,
+): Promise<CustomerState> {
+  const m = await requireMembership();
+  if (m.role !== "owner")
+    return { error: "Yalnız yönetici klinik erişim yetkisi açabilir." };
+  const user = await getUser();
+  const customerId = clean(formData.get("customer_id"));
+  const granteeId = clean(formData.get("grantee_id"));
+  if (!customerId || !granteeId) return { error: "Hasta ve uzman gerekli." };
+
+  const daysRaw = clean(formData.get("expires_days"));
+  const days = daysRaw ? Math.max(1, Math.round(Number(daysRaw))) : null;
+  const expiresAt =
+    days && Number.isFinite(days)
+      ? new Date(Date.now() + days * 86400000).toISOString()
+      : null;
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("clinical_access_grants").insert({
+    org_id: m.org_id,
+    customer_id: customerId,
+    grantee_id: granteeId,
+    granted_by: user?.id ?? null,
+    reason: clean(formData.get("reason")),
+    expires_at: expiresAt,
+  });
+  if (error) return { error: error.message };
+
+  await logAudit("clinical_access.grant", "customer", customerId, {
+    grantee_id: granteeId,
+    expires_at: expiresAt,
+  });
+  revalidatePath(`/musteriler/${customerId}`);
+  return { ok: true };
+}
+
+export async function revokeClinicalAccess(formData: FormData) {
+  const m = await requireMembership();
+  if (m.role !== "owner") return;
+  const id = clean(formData.get("id"));
+  const customerId = clean(formData.get("customer_id"));
+  if (!id) return;
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("clinical_access_grants")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return;
+
+  await logAudit("clinical_access.revoke", "customer", customerId, {});
+  if (customerId) revalidatePath(`/musteriler/${customerId}`);
 }

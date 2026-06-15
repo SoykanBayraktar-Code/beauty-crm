@@ -112,3 +112,52 @@ describe("Seans düşümü trigger'ı (paket)", () => {
     expect(Number(res.data!.sessions_used)).toBe(0);
   });
 });
+
+describe("F-7: atomik ödeme kaydı (record_payment)", () => {
+  it("makbuz no üretir + tüm satırları tek seferde kaydeder", async () => {
+    const r = await ownerA.client.rpc("record_payment", {
+      p_customer_id: custX,
+      p_type: "service",
+      p_note: null,
+      p_lines: [
+        { amount: 300, method: "cash" },
+        { amount: 200, method: "card" },
+      ],
+    });
+    expect(r.error).toBeNull();
+    expect(String(r.data)).toMatch(/^MKB-\d{8}-\d{4}$/);
+    const admin = adminClient();
+    const { data } = await admin
+      .from("payments")
+      .select("amount")
+      .eq("receipt_no", r.data as string);
+    expect((data ?? []).length).toBe(2);
+  });
+
+  it("geçersiz tutar → işlem geri alınır, makbuz numarası TÜKETİLMEZ (boşluk yok)", async () => {
+    const ok1 = await ownerA.client.rpc("record_payment", {
+      p_customer_id: custX,
+      p_type: "service",
+      p_note: null,
+      p_lines: [{ amount: 100, method: "cash" }],
+    });
+    const n1 = Number(String(ok1.data).slice(-4));
+
+    const fail = await ownerA.client.rpc("record_payment", {
+      p_customer_id: custX,
+      p_type: "service",
+      p_note: null,
+      p_lines: [{ amount: -5, method: "cash" }], // amount > 0 check ihlali → rollback
+    });
+    expect(fail.error).not.toBeNull();
+
+    const ok2 = await ownerA.client.rpc("record_payment", {
+      p_customer_id: custX,
+      p_type: "service",
+      p_note: null,
+      p_lines: [{ amount: 100, method: "cash" }],
+    });
+    const n2 = Number(String(ok2.data).slice(-4));
+    expect(n2).toBe(n1 + 1); // başarısız çağrı numara atlatmadı
+  });
+});
