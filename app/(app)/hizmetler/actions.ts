@@ -86,3 +86,57 @@ export async function deleteCatalogItem(formData: FormData) {
     .eq("id", id);
   revalidatePath("/hizmetler");
 }
+
+export async function upsertProcedureType(
+  _prev: CatalogState,
+  formData: FormData,
+): Promise<CatalogState> {
+  const m = await requireMembership();
+  const name = String(formData.get("name") ?? "").trim();
+  if (name.length < 2) return { error: "İşlem adı en az 2 karakter olmalı." };
+
+  let schema: unknown = [];
+  try {
+    schema = JSON.parse(String(formData.get("parameter_schema") ?? "[]"));
+  } catch {
+    return { error: "Parametre şeması geçersiz." };
+  }
+  if (!Array.isArray(schema)) schema = [];
+
+  const interval = clean(formData.get("recommended_interval_days"));
+  const payload = {
+    org_id: m.org_id,
+    name,
+    category: clean(formData.get("category")),
+    is_medical: formData.get("is_medical") === "on",
+    requires_consent: formData.get("requires_consent") === "on",
+    parameter_schema: schema,
+    default_session_count: Math.max(
+      1,
+      Math.round(num(formData.get("default_session_count"), 1)),
+    ),
+    recommended_interval_days: interval ? Math.round(Number(interval)) : null,
+  };
+
+  const supabase = await createClient();
+  const id = clean(formData.get("id"));
+  const { error } = id
+    ? await supabase.from("procedure_types").update(payload).eq("id", id)
+    : await supabase.from("procedure_types").insert(payload);
+  if (error) return { error: error.message };
+
+  revalidatePath("/hizmetler");
+  return { ok: true };
+}
+
+export async function deleteProcedureType(formData: FormData) {
+  await requireMembership();
+  const id = clean(formData.get("id"));
+  if (!id) return;
+  const supabase = await createClient();
+  await supabase
+    .from("procedure_types")
+    .update({ deleted_at: new Date().toISOString(), is_active: false })
+    .eq("id", id);
+  revalidatePath("/hizmetler");
+}

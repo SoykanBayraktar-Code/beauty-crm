@@ -735,6 +735,62 @@ export type Database = {
           },
         ]
       }
+      procedure_types: {
+        Row: {
+          category: string | null
+          created_at: string
+          default_session_count: number
+          deleted_at: string | null
+          id: string
+          is_active: boolean
+          is_medical: boolean
+          name: string
+          org_id: string
+          parameter_schema: Json
+          recommended_interval_days: number | null
+          requires_consent: boolean
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          default_session_count?: number
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          is_medical?: boolean
+          name: string
+          org_id: string
+          parameter_schema?: Json
+          recommended_interval_days?: number | null
+          requires_consent?: boolean
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          default_session_count?: number
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          is_medical?: boolean
+          name?: string
+          org_id?: string
+          parameter_schema?: Json
+          recommended_interval_days?: number | null
+          requires_consent?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "procedure_types_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       services: {
         Row: {
           category: string | null
@@ -746,6 +802,7 @@ export type Database = {
           name: string
           org_id: string
           price: number
+          procedure_type_id: string | null
           updated_at: string
         }
         Insert: {
@@ -758,6 +815,7 @@ export type Database = {
           name: string
           org_id: string
           price?: number
+          procedure_type_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -770,6 +828,7 @@ export type Database = {
           name?: string
           org_id?: string
           price?: number
+          procedure_type_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -778,6 +837,13 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "services_procedure_type_id_fkey"
+            columns: ["procedure_type_id"]
+            isOneToOne: false
+            referencedRelation: "procedure_types"
             referencedColumns: ["id"]
           },
         ]
