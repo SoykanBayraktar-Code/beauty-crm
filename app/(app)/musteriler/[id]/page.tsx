@@ -14,6 +14,8 @@ import { SellPackageDialog } from "@/components/customers/sell-package-dialog";
 import { TakePaymentDialog } from "@/components/customers/take-payment-dialog";
 import { GrantConsentDialog } from "@/components/customers/grant-consent-dialog";
 import { AnamnesisForm } from "@/components/customers/anamnesis-form";
+import { ClinicalRecordDialog } from "@/components/customers/clinical-record-dialog";
+import type { SchemaField } from "@/lib/procedure-schema";
 
 const GENDER_LABELS: Record<string, string> = {
   female: "Kadın",
@@ -157,6 +159,29 @@ export default async function CustomerProfilePage({
   if (anamnesis?.pregnancy) flags.push("Gebelik");
   if (anamnesis?.contraindications) flags.push("Kontrendikasyon");
 
+  const { data: treatments } = await supabase
+    .from("treatment_records")
+    .select(
+      "id, area, performed_at, soap_assessment, parameters, procedure_types(name), staff(full_name)",
+    )
+    .eq("customer_id", id)
+    .is("deleted_at", null)
+    .order("performed_at", { ascending: false });
+
+  const { data: procTypes } = await supabase
+    .from("procedure_types")
+    .select("id, name, parameter_schema")
+    .is("deleted_at", null)
+    .eq("is_active", true)
+    .order("name");
+
+  const { data: clinicStaff } = await supabase
+    .from("staff")
+    .select("id, full_name")
+    .is("deleted_at", null)
+    .eq("is_active", true)
+    .order("full_name");
+
   const initials = customer.full_name.slice(0, 2).toUpperCase();
 
   return (
@@ -206,6 +231,7 @@ export default async function CustomerProfilePage({
         <TabsList>
           <TabsTrigger value="genel">Genel</TabsTrigger>
           <TabsTrigger value="anamnez">Anamnez</TabsTrigger>
+          <TabsTrigger value="klinik">Klinik</TabsTrigger>
           <TabsTrigger value="randevular">Randevular</TabsTrigger>
           <TabsTrigger value="paketler">Paket/Seans</TabsTrigger>
           <TabsTrigger value="odemeler">Ödemeler</TabsTrigger>
@@ -247,6 +273,88 @@ export default async function CustomerProfilePage({
                 customerId={id}
                 current={anamnesis ?? undefined}
               />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="klinik">
+          <Card>
+            <CardContent className="space-y-4 py-5">
+              {(procTypes ?? []).length > 0 ? (
+                <div className="flex justify-end">
+                  <ClinicalRecordDialog
+                    customerId={id}
+                    staff={clinicStaff ?? []}
+                    procedureTypes={(procTypes ?? []).map((p) => ({
+                      id: p.id,
+                      name: p.name,
+                      parameter_schema:
+                        (p.parameter_schema as unknown as SchemaField[]) ?? [],
+                    }))}
+                  />
+                </div>
+              ) : (
+                <p className="text-muted-foreground text-sm">
+                  Önce Hizmetler&apos;den işlem türü tanımlayın.
+                </p>
+              )}
+              {(treatments ?? []).length === 0 ? (
+                <p className="text-muted-foreground text-sm">
+                  Henüz klinik kayıt yok.
+                </p>
+              ) : (
+                <ul className="space-y-3">
+                  {(treatments ?? []).map((t) => {
+                    const params = (t.parameters ?? {}) as Record<
+                      string,
+                      string
+                    >;
+                    const entries = Object.entries(params);
+                    return (
+                      <li
+                        key={t.id}
+                        className="border-border rounded-lg border p-3"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-medium">
+                            {relName(t.procedure_types)}
+                            {t.area ? (
+                              <span className="text-muted-foreground font-normal">
+                                {" "}
+                                · {t.area}
+                              </span>
+                            ) : null}
+                          </p>
+                          <span className="text-muted-foreground text-xs">
+                            {dateFmt.format(new Date(t.performed_at))}
+                          </span>
+                        </div>
+                        {entries.length > 0 ? (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {entries.map(([k, v]) => (
+                              <span
+                                key={k}
+                                className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-xs"
+                              >
+                                {k}: {v}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                        {t.soap_assessment ? (
+                          <p className="text-muted-foreground mt-2 text-xs">
+                            <span className="font-medium">A:</span>{" "}
+                            {t.soap_assessment}
+                          </p>
+                        ) : null}
+                        <p className="text-muted-foreground mt-1 text-xs">
+                          {relName(t.staff)}
+                        </p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

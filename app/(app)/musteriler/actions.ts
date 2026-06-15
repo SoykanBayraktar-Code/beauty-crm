@@ -286,3 +286,53 @@ export async function upsertAnamnesis(
   revalidatePath(`/musteriler/${customerId}`);
   return { ok: true };
 }
+
+export async function createTreatmentRecord(
+  _prev: CustomerState,
+  formData: FormData,
+): Promise<CustomerState> {
+  const m = await requireMembership();
+  const user = await getUser();
+  const customerId = clean(formData.get("customer_id"));
+  if (!customerId) return { error: "Müşteri gerekli." };
+
+  const supabase = await createClient();
+  const procedureTypeId = clean(formData.get("procedure_type_id"));
+
+  const parameters: Record<string, string> = {};
+  if (procedureTypeId) {
+    const { data: pt } = await supabase
+      .from("procedure_types")
+      .select("parameter_schema")
+      .eq("id", procedureTypeId)
+      .maybeSingle();
+    const schema = Array.isArray(pt?.parameter_schema)
+      ? (pt!.parameter_schema as { key: string }[])
+      : [];
+    for (const f of schema) {
+      const v = clean(formData.get(`param_${f.key}`));
+      if (v) parameters[f.key] = v;
+    }
+  }
+
+  const { error } = await supabase.from("treatment_records").insert({
+    org_id: m.org_id,
+    customer_id: customerId,
+    procedure_type_id: procedureTypeId,
+    staff_id: clean(formData.get("staff_id")),
+    area: clean(formData.get("area")),
+    soap_subjective: clean(formData.get("soap_subjective")),
+    soap_objective: clean(formData.get("soap_objective")),
+    soap_assessment: clean(formData.get("soap_assessment")),
+    soap_plan: clean(formData.get("soap_plan")),
+    parameters,
+    created_by: user?.id ?? null,
+  });
+  if (error) return { error: error.message };
+
+  await logAudit("treatment.create", "customer", customerId, {
+    procedure_type_id: procedureTypeId,
+  });
+  revalidatePath(`/musteriler/${customerId}`);
+  return { ok: true };
+}

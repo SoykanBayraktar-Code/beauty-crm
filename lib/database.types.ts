@@ -908,6 +908,102 @@ export type Database = {
           },
         ]
       }
+      treatment_records: {
+        Row: {
+          appointment_id: string | null
+          area: string | null
+          created_at: string
+          created_by: string | null
+          customer_id: string
+          deleted_at: string | null
+          id: string
+          org_id: string
+          parameters: Json
+          performed_at: string
+          procedure_type_id: string | null
+          soap_assessment: string | null
+          soap_objective: string | null
+          soap_plan: string | null
+          soap_subjective: string | null
+          staff_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          appointment_id?: string | null
+          area?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_id: string
+          deleted_at?: string | null
+          id?: string
+          org_id: string
+          parameters?: Json
+          performed_at?: string
+          procedure_type_id?: string | null
+          soap_assessment?: string | null
+          soap_objective?: string | null
+          soap_plan?: string | null
+          soap_subjective?: string | null
+          staff_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          appointment_id?: string | null
+          area?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string
+          deleted_at?: string | null
+          id?: string
+          org_id?: string
+          parameters?: Json
+          performed_at?: string
+          procedure_type_id?: string | null
+          soap_assessment?: string | null
+          soap_objective?: string | null
+          soap_plan?: string | null
+          soap_subjective?: string | null
+          staff_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "treatment_records_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "treatment_records_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "treatment_records_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "treatment_records_procedure_type_id_fkey"
+            columns: ["procedure_type_id"]
+            isOneToOne: false
+            referencedRelation: "procedure_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "treatment_records_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
