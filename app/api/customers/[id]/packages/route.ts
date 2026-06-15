@@ -1,10 +1,17 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getMembership } from "@/lib/auth/dal";
 
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  // Derinlemesine savunma: RLS'e ek olarak açık kimlik kontrolü.
+  const membership = await getMembership();
+  if (!membership) {
+    return NextResponse.json({ packages: [] }, { status: 401 });
+  }
+
   const { id } = await params;
   const supabase = await createClient();
   const { data } = await supabase

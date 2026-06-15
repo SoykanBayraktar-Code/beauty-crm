@@ -14,7 +14,7 @@ export async function logAudit(
     if (!membership) return;
     const user = await getUser();
     const supabase = await createClient();
-    await supabase.from("audit_log").insert({
+    const { error } = await supabase.from("audit_log").insert({
       org_id: membership.org_id,
       actor_id: user?.id ?? null,
       action,
@@ -22,7 +22,9 @@ export async function logAudit(
       entity_id: entityId ?? null,
       meta,
     });
-  } catch {
-    // sessizce geç — denetim kaydı ana işlemi engellememeli
+    // Hata ana işlemi bozmamalı, ama gözlemlenebilir olmalı ("sessiz boşluk" değil).
+    if (error) console.error(`[audit] insert failed (${action}):`, error.message);
+  } catch (e) {
+    console.error(`[audit] unexpected failure (${action}):`, e);
   }
 }

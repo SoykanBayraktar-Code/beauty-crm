@@ -25,10 +25,15 @@ export const getMembership = cache(async (): Promise<Membership | null> => {
   if (!user) return null;
 
   const supabase = await createClient();
+  // KRİTİK: members_select RLS org-kapsamlı (kullanıcı-kapsamlı DEĞİL) → org'daki
+  // TÜM üyeleri döndürür. user_id filtresi olmadan limit(1) BAŞKA bir üyenin rolünü
+  // verebilir (yetki kararı bozulması). Mutlaka kendi satırımıza bağla + deterministik sırala.
   const { data } = await supabase
     .from("org_members")
     .select("org_id, role, organizations(name)")
+    .eq("user_id", user.id)
     .is("deleted_at", null)
+    .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
 

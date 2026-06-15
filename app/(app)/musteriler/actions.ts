@@ -69,14 +69,28 @@ export async function upsertCustomer(
 
   const supabase = await createClient();
   const id = clean(formData.get("id"));
-  const { error } = id
-    ? await supabase.from("customers").update(payload).eq("id", id)
-    : await supabase.from("customers").insert(payload);
+  let savedId = id;
+  if (id) {
+    const { error } = await supabase
+      .from("customers")
+      .update(payload)
+      .eq("id", id);
+    if (error) return { error: error.message };
+  } else {
+    const { data, error } = await supabase
+      .from("customers")
+      .insert(payload)
+      .select("id")
+      .single();
+    if (error) return { error: error.message };
+    savedId = data?.id ?? null;
+  }
 
-  if (error) return { error: error.message };
-
+  await logAudit(id ? "customer.update" : "customer.create", "customer", savedId, {
+    full_name: parsed.data.full_name,
+  });
   revalidatePath("/musteriler");
-  if (id) revalidatePath(`/musteriler/${id}`);
+  if (savedId) revalidatePath(`/musteriler/${savedId}`);
   return { ok: true };
 }
 
@@ -108,10 +122,12 @@ export async function deleteCustomer(formData: FormData) {
   const id = clean(formData.get("id"));
   if (!id) return;
   const supabase = await createClient();
-  await supabase
+  const { error } = await supabase
     .from("customers")
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", id);
+  if (error) return;
+  await logAudit("customer.delete", "customer", id, {});
   revalidatePath("/musteriler");
 }
 
@@ -386,6 +402,30 @@ const PHOTO_MIME: Record<string, string> = {
   "image/png": "png",
   "image/webp": "webp",
 };
+const SNIFF_MIME: Record<"jpg" | "png" | "webp", string> = {
+  jpg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+};
+
+/** Client'ın bildirdiği MIME sahteci olabilir → gerçek baytlardan tür çıkar. */
+function sniffImage(b: Uint8Array): "jpg" | "png" | "webp" | null {
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff)
+    return "jpg";
+  if (
+    b.length >= 8 &&
+    b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47 &&
+    b[4] === 0x0d && b[5] === 0x0a && b[6] === 0x1a && b[7] === 0x0a
+  )
+    return "png";
+  if (
+    b.length >= 12 &&
+    b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && // RIFF
+    b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50 // WEBP
+  )
+    return "webp";
+  return null;
+}
 
 export async function uploadTreatmentPhoto(
   _prev: CustomerState,
@@ -405,8 +445,14 @@ export async function uploadTreatmentPhoto(
     return { error: "Dosya seçin." };
   if (file.size > MAX_PHOTO_BYTES)
     return { error: "Dosya 10MB'tan büyük olamaz." };
-  const ext = PHOTO_MIME[file.type];
-  if (!ext) return { error: "Yalnız JPEG, PNG veya WebP yüklenebilir." };
+  if (!PHOTO_MIME[file.type])
+    return { error: "Yalnız JPEG, PNG veya WebP yüklenebilir." };
+
+  // İçeriği gerçek baytlardan doğrula (bildirilen MIME'ye güvenme) — uzantı sniff'ten gelir.
+  const head = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+  const ext = sniffImage(head);
+  if (!ext)
+    return { error: "Dosya geçerli bir JPEG/PNG/WebP görseli değil." };
 
   const supabase = await createClient();
 
@@ -423,7 +469,7 @@ export async function uploadTreatmentPhoto(
   const path = `${m.org_id}/${customerId}/${randomUUID()}.${ext}`;
   const { error: upErr } = await supabase.storage
     .from(PHOTO_BUCKET)
-    .upload(path, file, { contentType: file.type, upsert: false });
+    .upload(path, file, { contentType: SNIFF_MIME[ext], upsert: false });
   if (upErr) return { error: upErr.message };
 
   const { error } = await supabase.from("treatment_photos").insert({
