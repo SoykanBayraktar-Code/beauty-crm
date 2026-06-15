@@ -23,9 +23,109 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 type ProcType = { id: string; name: string; parameter_schema: SchemaField[] };
+type UsageProduct = {
+  id: string;
+  name: string;
+  unit: string;
+  batches: { id: string; label: string }[];
+};
 
 const selectClass =
   "border-input bg-transparent h-9 w-full rounded-md border px-3 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50";
+
+const MAX_USAGE = 6;
+
+function MaterialUsage({ products }: { products: UsageProduct[] }) {
+  const [rows, setRows] = React.useState<{ key: number; productId: string }[]>(
+    [],
+  );
+  const nextKey = React.useRef(0);
+
+  if (products.length === 0) return null;
+
+  return (
+    <div className="border-border space-y-2 rounded-lg border p-3">
+      <div className="flex items-center justify-between">
+        <p className="text-muted-foreground text-xs">Kullanılan malzeme</p>
+        {rows.length < MAX_USAGE ? (
+          <button
+            type="button"
+            onClick={() =>
+              setRows((r) => [...r, { key: nextKey.current++, productId: "" }])
+            }
+            className="text-xs text-[var(--accent-foreground)] hover:underline"
+          >
+            + Ürün ekle
+          </button>
+        ) : null}
+      </div>
+      {rows.length === 0 ? (
+        <p className="text-muted-foreground text-xs">
+          İsteğe bağlı — eklenen ürünün stoğu lottan düşülür.
+        </p>
+      ) : null}
+      {rows.map((row, i) => {
+        const prod = products.find((p) => p.id === row.productId);
+        return (
+          <div key={row.key} className="grid grid-cols-[1fr_1fr_72px_28px] gap-2">
+            <select
+              name={`usage_product_${i}`}
+              className={selectClass}
+              value={row.productId}
+              onChange={(e) =>
+                setRows((r) =>
+                  r.map((x) =>
+                    x.key === row.key
+                      ? { ...x, productId: e.target.value }
+                      : x,
+                  ),
+                )
+              }
+            >
+              <option value="">Ürün…</option>
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <select
+              key={`batch-${row.productId}`}
+              name={`usage_batch_${i}`}
+              className={selectClass}
+              defaultValue=""
+              disabled={!prod}
+            >
+              <option value="">Lot…</option>
+              {(prod?.batches ?? []).map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.label}
+                </option>
+              ))}
+            </select>
+            <Input
+              name={`usage_qty_${i}`}
+              type="number"
+              min={0}
+              step="any"
+              placeholder={prod?.unit ?? "miktar"}
+            />
+            <button
+              type="button"
+              aria-label="Satırı kaldır"
+              onClick={() =>
+                setRows((r) => r.filter((x) => x.key !== row.key))
+              }
+              className="text-muted-foreground hover:text-destructive text-lg leading-none"
+            >
+              ×
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function DynamicField({ field }: { field: SchemaField }) {
   const name = `param_${field.key}`;
@@ -74,10 +174,12 @@ export function ClinicalRecordDialog({
   customerId,
   procedureTypes,
   staff,
+  products = [],
 }: {
   customerId: string;
   procedureTypes: ProcType[];
   staff: { id: string; full_name: string }[];
+  products?: UsageProduct[];
 }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
@@ -158,6 +260,8 @@ export function ClinicalRecordDialog({
               </div>
             </div>
           ) : null}
+
+          <MaterialUsage products={products} />
 
           <div className="space-y-2">
             <p className="text-muted-foreground text-xs">SOAP notu</p>

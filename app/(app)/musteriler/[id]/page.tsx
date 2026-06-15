@@ -167,7 +167,7 @@ export default async function CustomerProfilePage({
   const { data: treatments } = await supabase
     .from("treatment_records")
     .select(
-      "id, area, performed_at, soap_assessment, parameters, procedure_types(name), staff(full_name)",
+      "id, area, performed_at, soap_assessment, parameters, procedure_types(name), staff(full_name), treatment_product_usage(quantity, products(name, unit))",
     )
     .eq("customer_id", id)
     .is("deleted_at", null)
@@ -186,6 +186,45 @@ export default async function CustomerProfilePage({
     .is("deleted_at", null)
     .eq("is_active", true)
     .order("full_name");
+
+  // Sarf malzeme + lot (klinik kayıttan stok düşümü için) — yalnız stoğu olan lotlar
+  const [{ data: invProducts }, { data: invBatches }] = await Promise.all([
+    supabase
+      .from("products")
+      .select("id, name, unit")
+      .is("deleted_at", null)
+      .eq("category", "consumable")
+      .eq("is_active", true)
+      .order("name"),
+    supabase
+      .from("product_batches")
+      .select("id, product_id, batch_no, expiry_date, quantity")
+      .is("deleted_at", null)
+      .gt("quantity", 0)
+      .order("expiry_date", { ascending: true, nullsFirst: false }),
+  ]);
+
+  const batchByProduct = new Map<
+    string,
+    { id: string; label: string }[]
+  >();
+  for (const b of invBatches ?? []) {
+    const exp = b.expiry_date
+      ? ` · SKT ${dateFmt.format(new Date(b.expiry_date))}`
+      : "";
+    const label = `Lot ${b.batch_no ?? "—"} · ${Number(b.quantity)}${exp}`;
+    const arr = batchByProduct.get(b.product_id) ?? [];
+    arr.push({ id: b.id, label });
+    batchByProduct.set(b.product_id, arr);
+  }
+  const usageProducts = (invProducts ?? [])
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      unit: p.unit,
+      batches: batchByProduct.get(p.id) ?? [],
+    }))
+    .filter((p) => p.batches.length > 0);
 
   const { data: photoRows } = await supabase
     .from("treatment_photos")
@@ -325,6 +364,7 @@ export default async function CustomerProfilePage({
                   <ClinicalRecordDialog
                     customerId={id}
                     staff={clinicStaff ?? []}
+                    products={usageProducts}
                     procedureTypes={(procTypes ?? []).map((p) => ({
                       id: p.id,
                       name: p.name,
@@ -386,6 +426,26 @@ export default async function CustomerProfilePage({
                             <span className="font-medium">A:</span>{" "}
                             {t.soap_assessment}
                           </p>
+                        ) : null}
+                        {((t.treatment_product_usage ?? []) as {
+                          quantity: number;
+                          products: unknown;
+                        }[]).length > 0 ? (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {(
+                              (t.treatment_product_usage ?? []) as {
+                                quantity: number;
+                                products: unknown;
+                              }[]
+                            ).map((u, ui) => (
+                              <span
+                                key={ui}
+                                className="bg-accent text-accent-foreground rounded px-1.5 py-0.5 text-xs"
+                              >
+                                {relName(u.products)} · {Number(u.quantity)}
+                              </span>
+                            ))}
+                          </div>
                         ) : null}
                         <p className="text-muted-foreground mt-1 text-xs">
                           {relName(t.staff)}

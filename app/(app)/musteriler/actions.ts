@@ -316,25 +316,70 @@ export async function createTreatmentRecord(
     }
   }
 
-  const { error } = await supabase.from("treatment_records").insert({
-    org_id: m.org_id,
-    customer_id: customerId,
-    procedure_type_id: procedureTypeId,
-    staff_id: clean(formData.get("staff_id")),
-    area: clean(formData.get("area")),
-    soap_subjective: clean(formData.get("soap_subjective")),
-    soap_objective: clean(formData.get("soap_objective")),
-    soap_assessment: clean(formData.get("soap_assessment")),
-    soap_plan: clean(formData.get("soap_plan")),
-    parameters,
-    created_by: user?.id ?? null,
-  });
-  if (error) return { error: error.message };
+  const { data: record, error } = await supabase
+    .from("treatment_records")
+    .insert({
+      org_id: m.org_id,
+      customer_id: customerId,
+      procedure_type_id: procedureTypeId,
+      staff_id: clean(formData.get("staff_id")),
+      area: clean(formData.get("area")),
+      soap_subjective: clean(formData.get("soap_subjective")),
+      soap_objective: clean(formData.get("soap_objective")),
+      soap_assessment: clean(formData.get("soap_assessment")),
+      soap_plan: clean(formData.get("soap_plan")),
+      parameters,
+      created_by: user?.id ?? null,
+    })
+    .select("id")
+    .single();
+  if (error || !record) return { error: error?.message ?? "Kayıt başarısız." };
+
+  // Kullanılan sarf malzeme + lot → tetikleyici stok düşer (lot izlenebilirliği)
+  const usageRows: {
+    org_id: string;
+    treatment_record_id: string;
+    product_id: string;
+    batch_id: string;
+    quantity: number;
+    created_by: string | null;
+  }[] = [];
+  for (let i = 0; i < 6; i++) {
+    const productId = clean(formData.get(`usage_product_${i}`));
+    const batchId = clean(formData.get(`usage_batch_${i}`));
+    const q = Number(String(formData.get(`usage_qty_${i}`) ?? "").replace(",", "."));
+    if (productId && batchId && Number.isFinite(q) && q > 0) {
+      usageRows.push({
+        org_id: m.org_id,
+        treatment_record_id: record.id,
+        product_id: productId,
+        batch_id: batchId,
+        quantity: q,
+        created_by: user?.id ?? null,
+      });
+    }
+  }
+
+  if (usageRows.length > 0) {
+    const { error: usageErr } = await supabase
+      .from("treatment_product_usage")
+      .insert(usageRows);
+    if (usageErr) {
+      // Stok düşümü başarısızsa (örn. lotta yeterli yok) kaydı geri al
+      await supabase
+        .from("treatment_records")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", record.id);
+      return { error: usageErr.message };
+    }
+  }
 
   await logAudit("treatment.create", "customer", customerId, {
     procedure_type_id: procedureTypeId,
+    products: usageRows.length,
   });
   revalidatePath(`/musteriler/${customerId}`);
+  revalidatePath("/stok");
   return { ok: true };
 }
 
