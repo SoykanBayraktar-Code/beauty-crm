@@ -11,6 +11,7 @@ const PROTECTED_PREFIXES = [
   "/stok",
   "/raporlar",
   "/ayarlar",
+  "/makbuz",
 ];
 
 /**

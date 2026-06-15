@@ -140,3 +140,9 @@
     @apply font-sans;
   }
 }
+
+@media print {
+  [data-no-print] {
+    display: none !important;
+  }
+}

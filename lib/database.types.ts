@@ -433,6 +433,96 @@ export type Database = {
           },
         ]
       }
+      payments: {
+        Row: {
+          amount: number
+          appointment_id: string | null
+          created_at: string
+          created_by: string | null
+          customer_id: string
+          customer_package_id: string | null
+          deleted_at: string | null
+          id: string
+          method: Database["public"]["Enums"]["payment_method"]
+          note: string | null
+          org_id: string
+          paid_at: string
+          receipt_no: string
+          staff_id: string | null
+          type: string
+        }
+        Insert: {
+          amount: number
+          appointment_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_id: string
+          customer_package_id?: string | null
+          deleted_at?: string | null
+          id?: string
+          method: Database["public"]["Enums"]["payment_method"]
+          note?: string | null
+          org_id: string
+          paid_at?: string
+          receipt_no: string
+          staff_id?: string | null
+          type?: string
+        }
+        Update: {
+          amount?: number
+          appointment_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string
+          customer_package_id?: string | null
+          deleted_at?: string | null
+          id?: string
+          method?: Database["public"]["Enums"]["payment_method"]
+          note?: string | null
+          org_id?: string
+          paid_at?: string
+          receipt_no?: string
+          staff_id?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_customer_package_id_fkey"
+            columns: ["customer_package_id"]
+            isOneToOne: false
+            referencedRelation: "customer_packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       services: {
         Row: {
           category: string | null
@@ -568,6 +658,7 @@ export type Database = {
         | "no_show"
         | "cancelled"
       org_role: "owner" | "reception" | "specialist" | "accountant"
+      payment_method: "cash" | "card" | "transfer" | "online"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -708,6 +799,7 @@ export const Constants = {
         "cancelled",
       ],
       org_role: ["owner", "reception", "specialist", "accountant"],
+      payment_method: ["cash", "card", "transfer", "online"],
     },
   },
 } as const

@@ -11,6 +11,7 @@ import {
 } from "@/components/customers/customer-form-dialog";
 import { CustomerNotes } from "@/components/customers/customer-notes";
 import { SellPackageDialog } from "@/components/customers/sell-package-dialog";
+import { TakePaymentDialog } from "@/components/customers/take-payment-dialog";
 
 const GENDER_LABELS: Record<string, string> = {
   female: "Kadın",
@@ -101,6 +102,30 @@ export default async function CustomerProfilePage({
     .is("deleted_at", null)
     .eq("is_active", true)
     .order("name");
+
+  const { data: payments } = await supabase
+    .from("payments")
+    .select("receipt_no, amount, paid_at")
+    .eq("customer_id", id)
+    .is("deleted_at", null)
+    .order("paid_at", { ascending: false });
+
+  const receipts = Object.values(
+    (payments ?? []).reduce<
+      Record<string, { receipt_no: string; total: number; paid_at: string }>
+    >((acc, p) => {
+      const k = p.receipt_no;
+      acc[k] ??= { receipt_no: k, total: 0, paid_at: p.paid_at };
+      acc[k].total += Number(p.amount);
+      return acc;
+    }, {}),
+  ).sort((a, b) => (a.paid_at < b.paid_at ? 1 : -1));
+
+  const tl = new Intl.NumberFormat("tr-TR", {
+    style: "currency",
+    currency: "TRY",
+    maximumFractionDigits: 0,
+  });
 
   const initials = customer.full_name.slice(0, 2).toUpperCase();
 
@@ -255,8 +280,39 @@ export default async function CustomerProfilePage({
 
         <TabsContent value="odemeler">
           <Card>
-            <CardContent className="text-muted-foreground py-10 text-center text-sm">
-              Ödeme geçmişi Faz 1.4'te bağlanacak.
+            <CardContent className="space-y-4 py-5">
+              <div className="flex justify-end">
+                <TakePaymentDialog customerId={id} />
+              </div>
+              {receipts.length === 0 ? (
+                <p className="text-muted-foreground text-sm">
+                  Henüz ödeme yok.
+                </p>
+              ) : (
+                <ul className="divide-border divide-y">
+                  {receipts.map((r) => (
+                    <li
+                      key={r.receipt_no}
+                      className="flex items-center justify-between gap-3 py-2.5"
+                    >
+                      <div>
+                        <p className="text-sm font-medium tabular-nums">
+                          {tl.format(r.total)}
+                        </p>
+                        <p className="text-muted-foreground text-xs">
+                          {dateFmt.format(new Date(r.paid_at))} · {r.receipt_no}
+                        </p>
+                      </div>
+                      <Link
+                        href={`/makbuz/${r.receipt_no}`}
+                        className="text-xs text-[var(--accent-foreground)] hover:underline"
+                      >
+                        Makbuz
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

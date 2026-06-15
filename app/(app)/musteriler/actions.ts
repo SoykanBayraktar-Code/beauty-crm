@@ -149,3 +149,57 @@ export async function sellPackage(
   revalidatePath(`/musteriler/${customerId}`);
   return { ok: true };
 }
+
+export async function takePayment(
+  _prev: CustomerState,
+  formData: FormData,
+): Promise<CustomerState> {
+  const m = await requireMembership();
+  const user = await getUser();
+  const customerId = clean(formData.get("customer_id"));
+  if (!customerId) return { error: "Müşteri gerekli." };
+
+  const type = clean(formData.get("type")) ?? "service";
+  const note = clean(formData.get("note"));
+
+  const rows: {
+    org_id: string;
+    customer_id: string;
+    receipt_no: string;
+    amount: number;
+    method: string;
+    type: string;
+    note: string | null;
+    created_by: string | null;
+  }[] = [];
+
+  const now = new Date();
+  const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+  const receiptNo = `MKB-${ymd}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+  for (let i = 0; i < 3; i++) {
+    const amount = Number(String(formData.get(`amount_${i}`) ?? "").replace(",", "."));
+    const method = clean(formData.get(`method_${i}`));
+    if (method && Number.isFinite(amount) && amount > 0) {
+      rows.push({
+        org_id: m.org_id,
+        customer_id: customerId,
+        receipt_no: receiptNo,
+        amount: Math.round(amount * 100) / 100,
+        method,
+        type,
+        note,
+        created_by: user?.id ?? null,
+      });
+    }
+  }
+
+  if (rows.length === 0) return { error: "En az bir ödeme satırı girin." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("payments").insert(rows);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/musteriler/${customerId}`);
+  return { ok: true };
+}
