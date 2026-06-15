@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { IconLogout, IconUser } from "@tabler/icons-react";
 import { signOut } from "@/app/(auth)/actions";
 import {
@@ -17,6 +18,8 @@ function initials(value: string) {
 }
 
 export function UserMenu({ email }: { email: string }) {
+  const formRef = React.useRef<HTMLFormElement>(null);
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -31,15 +34,18 @@ export function UserMenu({ email }: { email: string }) {
           <span className="truncate text-sm">{email}</span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <form action={signOut}>
-          <DropdownMenuItem variant="destructive" asChild>
-            <button type="submit" className="w-full cursor-pointer">
-              <IconLogout size={16} aria-hidden />
-              Çıkış yap
-            </button>
-          </DropdownMenuItem>
-        </form>
+        <DropdownMenuItem
+          variant="destructive"
+          onSelect={(e) => {
+            e.preventDefault();
+            formRef.current?.requestSubmit();
+          }}
+        >
+          <IconLogout size={16} aria-hidden />
+          Çıkış yap
+        </DropdownMenuItem>
       </DropdownMenuContent>
+      <form ref={formRef} action={signOut} className="hidden" />
     </DropdownMenu>
   );
 }
