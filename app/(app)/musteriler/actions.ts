@@ -245,3 +245,44 @@ export async function grantConsent(
   revalidatePath(`/musteriler/${customerId}`);
   return { ok: true };
 }
+
+export async function upsertAnamnesis(
+  _prev: CustomerState,
+  formData: FormData,
+): Promise<CustomerState> {
+  const m = await requireMembership();
+  const user = await getUser();
+  const customerId = clean(formData.get("customer_id"));
+  if (!customerId) return { error: "Müşteri gerekli." };
+
+  const supabase = await createClient();
+  const { data: last } = await supabase
+    .from("customer_anamnesis")
+    .select("version")
+    .eq("customer_id", customerId)
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const version = (last?.version ?? 0) + 1;
+
+  const fitz = clean(formData.get("fitzpatrick"));
+  const { error } = await supabase.from("customer_anamnesis").insert({
+    org_id: m.org_id,
+    customer_id: customerId,
+    version,
+    allergies: clean(formData.get("allergies")),
+    chronic_conditions: clean(formData.get("chronic_conditions")),
+    medications: clean(formData.get("medications")),
+    pregnancy: formData.get("pregnancy") === "on",
+    fitzpatrick: fitz,
+    skin_type: clean(formData.get("skin_type")),
+    contraindications: clean(formData.get("contraindications")),
+    notes: clean(formData.get("notes")),
+    created_by: user?.id ?? null,
+  });
+  if (error) return { error: error.message };
+
+  await logAudit("anamnesis.update", "customer", customerId, { version });
+  revalidatePath(`/musteriler/${customerId}`);
+  return { ok: true };
+}

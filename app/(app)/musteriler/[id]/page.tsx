@@ -13,6 +13,7 @@ import { CustomerNotes } from "@/components/customers/customer-notes";
 import { SellPackageDialog } from "@/components/customers/sell-package-dialog";
 import { TakePaymentDialog } from "@/components/customers/take-payment-dialog";
 import { GrantConsentDialog } from "@/components/customers/grant-consent-dialog";
+import { AnamnesisForm } from "@/components/customers/anamnesis-form";
 
 const GENDER_LABELS: Record<string, string> = {
   female: "Kadın",
@@ -141,6 +142,21 @@ export default async function CustomerProfilePage({
     .eq("is_active", true)
     .order("name");
 
+  const { data: anamnesis } = await supabase
+    .from("customer_anamnesis")
+    .select(
+      "version, allergies, chronic_conditions, medications, pregnancy, fitzpatrick, skin_type, contraindications, notes",
+    )
+    .eq("customer_id", id)
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const flags: string[] = [];
+  if (anamnesis?.allergies) flags.push("Alerji");
+  if (anamnesis?.pregnancy) flags.push("Gebelik");
+  if (anamnesis?.contraindications) flags.push("Kontrendikasyon");
+
   const initials = customer.full_name.slice(0, 2).toUpperCase();
 
   return (
@@ -162,7 +178,12 @@ export default async function CustomerProfilePage({
             <h1 className="text-2xl font-medium tracking-tight">
               {customer.full_name}
             </h1>
-            <div className="mt-1 flex flex-wrap gap-1">
+            <div className="mt-1 flex flex-wrap items-center gap-1">
+              {flags.map((f) => (
+                <Badge key={f} variant="destructive">
+                  ⚠ {f}
+                </Badge>
+              ))}
               {(customer.tags ?? []).map((t: string) => (
                 <Badge key={t} variant="secondary">
                   {t}
@@ -184,6 +205,7 @@ export default async function CustomerProfilePage({
       <Tabs defaultValue="genel">
         <TabsList>
           <TabsTrigger value="genel">Genel</TabsTrigger>
+          <TabsTrigger value="anamnez">Anamnez</TabsTrigger>
           <TabsTrigger value="randevular">Randevular</TabsTrigger>
           <TabsTrigger value="paketler">Paket/Seans</TabsTrigger>
           <TabsTrigger value="odemeler">Ödemeler</TabsTrigger>
@@ -213,6 +235,18 @@ export default async function CustomerProfilePage({
                 }
               />
               <Field label="Kaynak" value={customer.source ?? "—"} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="anamnez">
+          <Card>
+            <CardContent className="py-5">
+              <AnamnesisForm
+                key={anamnesis?.version ?? "new"}
+                customerId={id}
+                current={anamnesis ?? undefined}
+              />
             </CardContent>
           </Card>
         </TabsContent>

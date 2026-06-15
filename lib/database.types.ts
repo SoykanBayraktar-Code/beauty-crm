@@ -206,6 +206,72 @@ export type Database = {
           },
         ]
       }
+      customer_anamnesis: {
+        Row: {
+          allergies: string | null
+          chronic_conditions: string | null
+          contraindications: string | null
+          created_at: string
+          created_by: string | null
+          customer_id: string
+          fitzpatrick: string | null
+          id: string
+          medications: string | null
+          notes: string | null
+          org_id: string
+          pregnancy: boolean
+          skin_type: string | null
+          version: number
+        }
+        Insert: {
+          allergies?: string | null
+          chronic_conditions?: string | null
+          contraindications?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_id: string
+          fitzpatrick?: string | null
+          id?: string
+          medications?: string | null
+          notes?: string | null
+          org_id: string
+          pregnancy?: boolean
+          skin_type?: string | null
+          version?: number
+        }
+        Update: {
+          allergies?: string | null
+          chronic_conditions?: string | null
+          contraindications?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string
+          fitzpatrick?: string | null
+          id?: string
+          medications?: string | null
+          notes?: string | null
+          org_id?: string
+          pregnancy?: boolean
+          skin_type?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_anamnesis_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_anamnesis_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customer_consents: {
         Row: {
           body_snapshot: string
@@ -781,6 +847,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_access_clinical: {
+        Args: { target_customer: string }
+        Returns: boolean
+      }
       create_organization: {
         Args: { p_full_name?: string; p_name: string }
         Returns: string
