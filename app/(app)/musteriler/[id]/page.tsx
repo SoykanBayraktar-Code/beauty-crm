@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { IconArrowLeft, IconEdit } from "@tabler/icons-react";
 import { createClient } from "@/lib/supabase/server";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -88,13 +87,12 @@ export default async function CustomerProfilePage({
         </div>
         <CustomerFormDialog
           customer={customer as CustomerInput}
-          trigger={
-            <Button variant="outline" size="sm">
-              <IconEdit size={16} aria-hidden />
-              Düzenle
-            </Button>
-          }
-        />
+          variant="outline"
+          size="sm"
+        >
+          <IconEdit size={16} aria-hidden />
+          Düzenle
+        </CustomerFormDialog>
       </div>
 
       <Tabs defaultValue="genel">

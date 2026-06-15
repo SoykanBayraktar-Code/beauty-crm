@@ -206,6 +206,110 @@ export type Database = {
         }
         Relationships: []
       }
+      packages: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          is_active: boolean
+          name: string
+          org_id: string
+          price: number
+          service_id: string | null
+          total_sessions: number
+          updated_at: string
+          valid_days: number | null
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          org_id: string
+          price?: number
+          service_id?: string | null
+          total_sessions?: number
+          updated_at?: string
+          valid_days?: number | null
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          org_id?: string
+          price?: number
+          service_id?: string | null
+          total_sessions?: number
+          updated_at?: string
+          valid_days?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "packages_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "packages_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      services: {
+        Row: {
+          category: string | null
+          created_at: string
+          deleted_at: string | null
+          duration_min: number
+          id: string
+          is_active: boolean
+          name: string
+          org_id: string
+          price: number
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          duration_min?: number
+          id?: string
+          is_active?: boolean
+          name: string
+          org_id: string
+          price?: number
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          duration_min?: number
+          id?: string
+          is_active?: boolean
+          name?: string
+          org_id?: string
+          price?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "services_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       staff: {
         Row: {
           calendar_color: string

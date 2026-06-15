@@ -15,10 +15,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+import type { VariantProps } from "class-variance-authority";
 
 export type CustomerInput = {
   id: string;
@@ -36,11 +38,17 @@ const selectClass =
   "border-input bg-transparent h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50";
 
 export function CustomerFormDialog({
-  trigger,
   customer,
+  children,
+  variant,
+  size,
+  className,
 }: {
-  trigger: React.ReactElement;
   customer?: CustomerInput;
+  children: React.ReactNode;
+  variant?: VariantProps<typeof buttonVariants>["variant"];
+  size?: VariantProps<typeof buttonVariants>["size"];
+  className?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
@@ -58,7 +66,9 @@ export function CustomerFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={trigger} />
+      <DialogTrigger className={cn(buttonVariants({ variant, size }), className)}>
+        {children}
+      </DialogTrigger>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>

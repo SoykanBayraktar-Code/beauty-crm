@@ -4,7 +4,6 @@ import * as React from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { IconSearch, IconPlus } from "@tabler/icons-react";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { CustomerFormDialog } from "./customer-form-dialog";
 
 const selectClass =
@@ -60,14 +59,10 @@ export function CustomersToolbar() {
         <option value="other">Diğer</option>
       </select>
 
-      <CustomerFormDialog
-        trigger={
-          <Button className="ml-auto">
-            <IconPlus size={16} aria-hidden />
-            Yeni müşteri
-          </Button>
-        }
-      />
+      <CustomerFormDialog className="ml-auto">
+        <IconPlus size={16} aria-hidden />
+        Yeni müşteri
+      </CustomerFormDialog>
     </div>
   );
 }
