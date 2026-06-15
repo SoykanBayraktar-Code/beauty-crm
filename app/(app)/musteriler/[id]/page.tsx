@@ -12,6 +12,7 @@ import {
 import { CustomerNotes } from "@/components/customers/customer-notes";
 import { SellPackageDialog } from "@/components/customers/sell-package-dialog";
 import { TakePaymentDialog } from "@/components/customers/take-payment-dialog";
+import { GrantConsentDialog } from "@/components/customers/grant-consent-dialog";
 
 const GENDER_LABELS: Record<string, string> = {
   female: "Kadın",
@@ -127,6 +128,19 @@ export default async function CustomerProfilePage({
     maximumFractionDigits: 0,
   });
 
+  const { data: consents } = await supabase
+    .from("customer_consents")
+    .select("id, title, version, granted_at")
+    .eq("customer_id", id)
+    .order("granted_at", { ascending: false });
+
+  const { data: consentTemplates } = await supabase
+    .from("consent_templates")
+    .select("id, name")
+    .is("deleted_at", null)
+    .eq("is_active", true)
+    .order("name");
+
   const initials = customer.full_name.slice(0, 2).toUpperCase();
 
   return (
@@ -173,6 +187,7 @@ export default async function CustomerProfilePage({
           <TabsTrigger value="randevular">Randevular</TabsTrigger>
           <TabsTrigger value="paketler">Paket/Seans</TabsTrigger>
           <TabsTrigger value="odemeler">Ödemeler</TabsTrigger>
+          <TabsTrigger value="onam">Onam</TabsTrigger>
           <TabsTrigger value="notlar">Notlar</TabsTrigger>
         </TabsList>
 
@@ -309,6 +324,47 @@ export default async function CustomerProfilePage({
                       >
                         Makbuz
                       </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="onam">
+          <Card>
+            <CardContent className="space-y-4 py-5">
+              {(consentTemplates ?? []).length > 0 ? (
+                <div className="flex justify-end">
+                  <GrantConsentDialog
+                    customerId={id}
+                    templates={consentTemplates ?? []}
+                  />
+                </div>
+              ) : (
+                <p className="text-muted-foreground text-sm">
+                  Önce Ayarlar&apos;dan onam metni ekleyin.
+                </p>
+              )}
+              {(consents ?? []).length === 0 ? (
+                <p className="text-muted-foreground text-sm">
+                  Henüz alınmış onam yok.
+                </p>
+              ) : (
+                <ul className="divide-border divide-y">
+                  {(consents ?? []).map((c) => (
+                    <li
+                      key={c.id}
+                      className="flex items-center justify-between gap-3 py-2.5"
+                    >
+                      <div>
+                        <p className="text-sm">{c.title}</p>
+                        <p className="text-muted-foreground text-xs">
+                          v{c.version} · {dateFmt.format(new Date(c.granted_at))}
+                        </p>
+                      </div>
+                      <Badge variant="secondary">Alındı</Badge>
                     </li>
                   ))}
                 </ul>

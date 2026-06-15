@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireMembership, getUser } from "@/lib/auth/dal";
+import { logAudit } from "@/lib/audit";
 
 const customerSchema = z.object({
   full_name: z.string().trim().min(2, "Ad soyad en az 2 karakter olmalı."),
@@ -146,6 +147,7 @@ export async function sellPackage(
   });
   if (error) return { error: error.message };
 
+  await logAudit("package.sell", "customer", customerId, { package: pkg.name });
   revalidatePath(`/musteriler/${customerId}`);
   return { ok: true };
 }
@@ -200,6 +202,46 @@ export async function takePayment(
   const { error } = await supabase.from("payments").insert(rows);
   if (error) return { error: error.message };
 
+  const total = rows.reduce((s, r) => s + r.amount, 0);
+  await logAudit("payment.take", "customer", customerId, {
+    receipt_no: receiptNo,
+    total,
+  });
+  revalidatePath(`/musteriler/${customerId}`);
+  return { ok: true };
+}
+
+export async function grantConsent(
+  _prev: CustomerState,
+  formData: FormData,
+): Promise<CustomerState> {
+  const m = await requireMembership();
+  const user = await getUser();
+  const customerId = clean(formData.get("customer_id"));
+  const templateId = clean(formData.get("template_id"));
+  if (!customerId || !templateId)
+    return { error: "Müşteri ve onam metni gerekli." };
+
+  const supabase = await createClient();
+  const { data: tpl } = await supabase
+    .from("consent_templates")
+    .select("name, body, version")
+    .eq("id", templateId)
+    .maybeSingle();
+  if (!tpl) return { error: "Onam metni bulunamadı." };
+
+  const { error } = await supabase.from("customer_consents").insert({
+    org_id: m.org_id,
+    customer_id: customerId,
+    template_id: templateId,
+    title: tpl.name,
+    version: tpl.version,
+    body_snapshot: tpl.body,
+    granted_by: user?.id ?? null,
+  });
+  if (error) return { error: error.message };
+
+  await logAudit("consent.grant", "customer", customerId, { title: tpl.name });
   revalidatePath(`/musteriler/${customerId}`);
   return { ok: true };
 }
