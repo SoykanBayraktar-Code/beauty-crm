@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -335,4 +336,90 @@ export async function createTreatmentRecord(
   });
   revalidatePath(`/musteriler/${customerId}`);
   return { ok: true };
+}
+
+const PHOTO_BUCKET = "treatment-photos";
+const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
+const PHOTO_MIME: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
+
+export async function uploadTreatmentPhoto(
+  _prev: CustomerState,
+  formData: FormData,
+): Promise<CustomerState> {
+  const m = await requireMembership();
+  const user = await getUser();
+  const customerId = clean(formData.get("customer_id"));
+  if (!customerId) return { error: "Müşteri gerekli." };
+
+  const kind = clean(formData.get("kind"));
+  if (kind !== "before" && kind !== "after")
+    return { error: "Foto türü geçersiz." };
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0)
+    return { error: "Dosya seçin." };
+  if (file.size > MAX_PHOTO_BYTES)
+    return { error: "Dosya 10MB'tan büyük olamaz." };
+  const ext = PHOTO_MIME[file.type];
+  if (!ext) return { error: "Yalnız JPEG, PNG veya WebP yüklenebilir." };
+
+  const supabase = await createClient();
+
+  // KVKK: onam alınmamışsa foto yüklenemez (Faz 1.5 onam kontrolü)
+  const { count } = await supabase
+    .from("customer_consents")
+    .select("id", { count: "exact", head: true })
+    .eq("customer_id", customerId);
+  if (!count)
+    return {
+      error: "Foto yüklemek için önce müşteriden onam alınmalı (Onam sekmesi).",
+    };
+
+  const path = `${m.org_id}/${customerId}/${randomUUID()}.${ext}`;
+  const { error: upErr } = await supabase.storage
+    .from(PHOTO_BUCKET)
+    .upload(path, file, { contentType: file.type, upsert: false });
+  if (upErr) return { error: upErr.message };
+
+  const { error } = await supabase.from("treatment_photos").insert({
+    org_id: m.org_id,
+    customer_id: customerId,
+    treatment_record_id: clean(formData.get("treatment_record_id")),
+    kind,
+    storage_path: path,
+    caption: clean(formData.get("caption")),
+    created_by: user?.id ?? null,
+  });
+  if (error) {
+    // Meta kaydı başarısızsa yüklenen dosyayı geri al (yetim dosya bırakma)
+    await supabase.storage.from(PHOTO_BUCKET).remove([path]);
+    return { error: error.message };
+  }
+
+  await logAudit("photo.upload", "customer", customerId, { kind });
+  revalidatePath(`/musteriler/${customerId}`);
+  return { ok: true };
+}
+
+export async function deleteTreatmentPhoto(formData: FormData) {
+  await requireMembership();
+  const id = clean(formData.get("id"));
+  const customerId = clean(formData.get("customer_id"));
+  const path = clean(formData.get("storage_path"));
+  if (!id || !customerId) return;
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("treatment_photos")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return;
+
+  if (path) await supabase.storage.from(PHOTO_BUCKET).remove([path]);
+  await logAudit("photo.delete", "customer", customerId, {});
+  revalidatePath(`/musteriler/${customerId}`);
 }

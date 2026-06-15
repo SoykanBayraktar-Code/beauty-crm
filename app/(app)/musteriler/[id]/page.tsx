@@ -15,6 +15,11 @@ import { TakePaymentDialog } from "@/components/customers/take-payment-dialog";
 import { GrantConsentDialog } from "@/components/customers/grant-consent-dialog";
 import { AnamnesisForm } from "@/components/customers/anamnesis-form";
 import { ClinicalRecordDialog } from "@/components/customers/clinical-record-dialog";
+import { PhotoUploadDialog } from "@/components/customers/photo-upload-dialog";
+import {
+  PhotoGallery,
+  type PhotoItem,
+} from "@/components/customers/photo-gallery";
 import type { SchemaField } from "@/lib/procedure-schema";
 
 const GENDER_LABELS: Record<string, string> = {
@@ -182,6 +187,40 @@ export default async function CustomerProfilePage({
     .eq("is_active", true)
     .order("full_name");
 
+  const { data: photoRows } = await supabase
+    .from("treatment_photos")
+    .select("id, kind, storage_path, caption, taken_at")
+    .eq("customer_id", id)
+    .is("deleted_at", null)
+    .order("taken_at", { ascending: false });
+
+  // Özel bucket → yalnız imzalı URL ile okunur (1 saat geçerli)
+  const signedUrl = new Map<string, string>();
+  const photoPaths = (photoRows ?? []).map((p) => p.storage_path);
+  if (photoPaths.length > 0) {
+    const { data: signed } = await supabase.storage
+      .from("treatment-photos")
+      .createSignedUrls(photoPaths, 3600);
+    for (const s of signed ?? []) {
+      if (s.path && s.signedUrl) signedUrl.set(s.path, s.signedUrl);
+    }
+  }
+  const photos: PhotoItem[] = (photoRows ?? []).map((p) => ({
+    id: p.id,
+    kind: p.kind as "before" | "after",
+    storage_path: p.storage_path,
+    caption: p.caption,
+    taken_at: p.taken_at,
+    url: signedUrl.get(p.storage_path) ?? null,
+  }));
+
+  const treatmentOptions = (treatments ?? []).map((t) => ({
+    id: t.id,
+    label: `${relName(t.procedure_types)} · ${dateFmt.format(new Date(t.performed_at))}`,
+  }));
+
+  const hasConsent = (consents ?? []).length > 0;
+
   const initials = customer.full_name.slice(0, 2).toUpperCase();
 
   return (
@@ -232,6 +271,7 @@ export default async function CustomerProfilePage({
           <TabsTrigger value="genel">Genel</TabsTrigger>
           <TabsTrigger value="anamnez">Anamnez</TabsTrigger>
           <TabsTrigger value="klinik">Klinik</TabsTrigger>
+          <TabsTrigger value="foto">Foto</TabsTrigger>
           <TabsTrigger value="randevular">Randevular</TabsTrigger>
           <TabsTrigger value="paketler">Paket/Seans</TabsTrigger>
           <TabsTrigger value="odemeler">Ödemeler</TabsTrigger>
@@ -355,6 +395,27 @@ export default async function CustomerProfilePage({
                   })}
                 </ul>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="foto">
+          <Card>
+            <CardContent className="space-y-4 py-5">
+              {hasConsent ? (
+                <div className="flex justify-end">
+                  <PhotoUploadDialog
+                    customerId={id}
+                    treatments={treatmentOptions}
+                  />
+                </div>
+              ) : (
+                <p className="text-muted-foreground rounded-lg border border-dashed border-[var(--border)] p-3 text-sm">
+                  ⚠ Fotoğraf yüklemek için önce <strong>Onam</strong>{" "}
+                  sekmesinden müşteriden onam alınmalı (KVKK).
+                </p>
+              )}
+              <PhotoGallery customerId={id} photos={photos} />
             </CardContent>
           </Card>
         </TabsContent>
