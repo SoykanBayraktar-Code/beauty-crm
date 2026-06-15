@@ -34,6 +34,93 @@ export type Database = {
   }
   public: {
     Tables: {
+      appointments: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          customer_id: string
+          customer_package_id: string | null
+          deleted_at: string | null
+          end_at: string
+          id: string
+          notes: string | null
+          org_id: string
+          service_id: string | null
+          staff_id: string
+          start_at: string
+          status: Database["public"]["Enums"]["appointment_status"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          customer_id: string
+          customer_package_id?: string | null
+          deleted_at?: string | null
+          end_at: string
+          id?: string
+          notes?: string | null
+          org_id: string
+          service_id?: string | null
+          staff_id: string
+          start_at: string
+          status?: Database["public"]["Enums"]["appointment_status"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string
+          customer_package_id?: string | null
+          deleted_at?: string | null
+          end_at?: string
+          id?: string
+          notes?: string | null
+          org_id?: string
+          service_id?: string | null
+          staff_id?: string
+          start_at?: string
+          status?: Database["public"]["Enums"]["appointment_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appointments_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_customer_package_id_fkey"
+            columns: ["customer_package_id"]
+            isOneToOne: false
+            referencedRelation: "customer_packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customer_notes: {
         Row: {
           author_id: string | null
@@ -72,6 +159,89 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_packages: {
+        Row: {
+          created_at: string
+          customer_id: string
+          deleted_at: string | null
+          expires_at: string | null
+          id: string
+          name: string
+          org_id: string
+          package_id: string | null
+          price_paid: number
+          purchased_at: string
+          service_id: string | null
+          sessions_total: number
+          sessions_used: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          customer_id: string
+          deleted_at?: string | null
+          expires_at?: string | null
+          id?: string
+          name: string
+          org_id: string
+          package_id?: string | null
+          price_paid?: number
+          purchased_at?: string
+          service_id?: string | null
+          sessions_total: number
+          sessions_used?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string
+          deleted_at?: string | null
+          expires_at?: string | null
+          id?: string
+          name?: string
+          org_id?: string
+          package_id?: string | null
+          price_paid?: number
+          purchased_at?: string
+          service_id?: string | null
+          sessions_total?: number
+          sessions_used?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_packages_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_packages_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_packages_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_packages_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
             referencedColumns: ["id"]
           },
         ]
@@ -389,6 +559,14 @@ export type Database = {
       show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
+      appointment_status:
+        | "scheduled"
+        | "confirmed"
+        | "arrived"
+        | "in_progress"
+        | "completed"
+        | "no_show"
+        | "cancelled"
       org_role: "owner" | "reception" | "specialist" | "accountant"
     }
     CompositeTypes: {
@@ -520,6 +698,15 @@ export const Constants = {
   },
   public: {
     Enums: {
+      appointment_status: [
+        "scheduled",
+        "confirmed",
+        "arrived",
+        "in_progress",
+        "completed",
+        "no_show",
+        "cancelled",
+      ],
       org_role: ["owner", "reception", "specialist", "accountant"],
     },
   },

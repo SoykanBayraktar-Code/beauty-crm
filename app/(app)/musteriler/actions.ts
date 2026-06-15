@@ -112,3 +112,40 @@ export async function deleteCustomer(formData: FormData) {
     .eq("id", id);
   revalidatePath("/musteriler");
 }
+
+export async function sellPackage(
+  _prev: CustomerState,
+  formData: FormData,
+): Promise<CustomerState> {
+  const m = await requireMembership();
+  const customerId = clean(formData.get("customer_id"));
+  const packageId = clean(formData.get("package_id"));
+  if (!customerId || !packageId) return { error: "Müşteri ve paket gerekli." };
+
+  const supabase = await createClient();
+  const { data: pkg } = await supabase
+    .from("packages")
+    .select("name, total_sessions, price, valid_days, service_id")
+    .eq("id", packageId)
+    .maybeSingle();
+  if (!pkg) return { error: "Paket bulunamadı." };
+
+  const expiresAt = pkg.valid_days
+    ? new Date(Date.now() + pkg.valid_days * 86400000).toISOString()
+    : null;
+
+  const { error } = await supabase.from("customer_packages").insert({
+    org_id: m.org_id,
+    customer_id: customerId,
+    package_id: packageId,
+    service_id: pkg.service_id,
+    name: pkg.name,
+    sessions_total: pkg.total_sessions,
+    price_paid: pkg.price,
+    expires_at: expiresAt,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath(`/musteriler/${customerId}`);
+  return { ok: true };
+}

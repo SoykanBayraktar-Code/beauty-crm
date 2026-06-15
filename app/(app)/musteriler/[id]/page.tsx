@@ -10,6 +10,7 @@ import {
   type CustomerInput,
 } from "@/components/customers/customer-form-dialog";
 import { CustomerNotes } from "@/components/customers/customer-notes";
+import { SellPackageDialog } from "@/components/customers/sell-package-dialog";
 
 const GENDER_LABELS: Record<string, string> = {
   female: "Kadın",
@@ -17,11 +18,35 @@ const GENDER_LABELS: Record<string, string> = {
   other: "Diğer",
 };
 
+const APPT_STATUS: Record<string, string> = {
+  scheduled: "Planlandı",
+  confirmed: "Onaylandı",
+  arrived: "Geldi",
+  in_progress: "İşlemde",
+  completed: "Tamamlandı",
+  no_show: "Gelmedi",
+  cancelled: "İptal",
+};
+
 const dateFmt = new Intl.DateTimeFormat("tr-TR", {
   day: "2-digit",
   month: "long",
   year: "numeric",
 });
+const dateTimeFmt = new Intl.DateTimeFormat("tr-TR", {
+  timeZone: "Europe/Istanbul",
+  day: "2-digit",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+function relName(rel: unknown): string {
+  if (!rel) return "—";
+  if (Array.isArray(rel)) return rel[0]?.name ?? rel[0]?.full_name ?? "—";
+  const o = rel as { name?: string; full_name?: string };
+  return o.name ?? o.full_name ?? "—";
+}
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
@@ -54,6 +79,28 @@ export default async function CustomerProfilePage({
     .select("id, body, created_at")
     .eq("customer_id", id)
     .order("created_at", { ascending: false });
+
+  const { data: appointments } = await supabase
+    .from("appointments")
+    .select("id, start_at, status, services(name), staff(full_name)")
+    .eq("customer_id", id)
+    .is("deleted_at", null)
+    .order("start_at", { ascending: false })
+    .limit(50);
+
+  const { data: custPackages } = await supabase
+    .from("customer_packages")
+    .select("id, name, sessions_total, sessions_used, expires_at, status")
+    .eq("customer_id", id)
+    .is("deleted_at", null)
+    .order("purchased_at", { ascending: false });
+
+  const { data: catalogPackages } = await supabase
+    .from("packages")
+    .select("id, name")
+    .is("deleted_at", null)
+    .eq("is_active", true)
+    .order("name");
 
   const initials = customer.full_name.slice(0, 2).toUpperCase();
 
@@ -132,16 +179,76 @@ export default async function CustomerProfilePage({
 
         <TabsContent value="randevular">
           <Card>
-            <CardContent className="text-muted-foreground py-10 text-center text-sm">
-              Randevu geçmişi Faz 1.3'te bağlanacak.
+            <CardContent className="py-5">
+              {(appointments ?? []).length === 0 ? (
+                <p className="text-muted-foreground text-sm">
+                  Henüz randevu yok.
+                </p>
+              ) : (
+                <ul className="divide-border divide-y">
+                  {(appointments ?? []).map((a) => (
+                    <li
+                      key={a.id}
+                      className="flex items-center justify-between gap-3 py-2.5"
+                    >
+                      <div>
+                        <p className="text-sm">{relName(a.services)}</p>
+                        <p className="text-muted-foreground text-xs">
+                          {dateTimeFmt.format(new Date(a.start_at))} ·{" "}
+                          {relName(a.staff)}
+                        </p>
+                      </div>
+                      <Badge variant="secondary">
+                        {APPT_STATUS[a.status] ?? a.status}
+                      </Badge>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="paketler">
           <Card>
-            <CardContent className="text-muted-foreground py-10 text-center text-sm">
-              Paket/seans takibi Faz 1.3'te bağlanacak.
+            <CardContent className="space-y-4 py-5">
+              {(catalogPackages ?? []).length > 0 ? (
+                <div className="flex justify-end">
+                  <SellPackageDialog
+                    customerId={id}
+                    packages={catalogPackages ?? []}
+                  />
+                </div>
+              ) : null}
+              {(custPackages ?? []).length === 0 ? (
+                <p className="text-muted-foreground text-sm">
+                  Henüz paket yok.
+                </p>
+              ) : (
+                <ul className="space-y-2">
+                  {(custPackages ?? []).map((p) => {
+                    const remaining = p.sessions_total - p.sessions_used;
+                    return (
+                      <li
+                        key={p.id}
+                        className="border-border rounded-lg border p-3"
+                      >
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-medium">{p.name}</p>
+                          <Badge variant={remaining > 0 ? "secondary" : "outline"}>
+                            {remaining}/{p.sessions_total} kaldı
+                          </Badge>
+                        </div>
+                        {p.expires_at ? (
+                          <p className="text-muted-foreground mt-1 text-xs">
+                            Son kullanım: {dateFmt.format(new Date(p.expires_at))}
+                          </p>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
