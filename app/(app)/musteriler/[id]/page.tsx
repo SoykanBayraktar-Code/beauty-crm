@@ -84,40 +84,113 @@ export default async function CustomerProfilePage({
 
   if (!customer) notFound();
 
-  const { data: notes } = await supabase
-    .from("customer_notes")
-    .select("id, body, created_at")
-    .eq("customer_id", id)
-    .order("created_at", { ascending: false });
-
-  const { data: appointments } = await supabase
-    .from("appointments")
-    .select("id, start_at, status, services(name), staff(full_name)")
-    .eq("customer_id", id)
-    .is("deleted_at", null)
-    .order("start_at", { ascending: false })
-    .limit(50);
-
-  const { data: custPackages } = await supabase
-    .from("customer_packages")
-    .select("id, name, sessions_total, sessions_used, expires_at, status")
-    .eq("customer_id", id)
-    .is("deleted_at", null)
-    .order("purchased_at", { ascending: false });
-
-  const { data: catalogPackages } = await supabase
-    .from("packages")
-    .select("id, name")
-    .is("deleted_at", null)
-    .eq("is_active", true)
-    .order("name");
-
-  const { data: payments } = await supabase
-    .from("payments")
-    .select("receipt_no, amount, paid_at")
-    .eq("customer_id", id)
-    .is("deleted_at", null)
-    .order("paid_at", { ascending: false });
+  // Profil sekmelerinin tüm bağımsız verisi — tek turda (waterfall yerine paralel)
+  const [
+    { data: notes },
+    { data: appointments },
+    { data: custPackages },
+    { data: catalogPackages },
+    { data: payments },
+    { data: consents },
+    { data: consentTemplates },
+    { data: anamnesis },
+    { data: treatments },
+    { data: procTypes },
+    { data: clinicStaff },
+    { data: invProducts },
+    { data: invBatches },
+    { data: photoRows },
+  ] = await Promise.all([
+    supabase
+      .from("customer_notes")
+      .select("id, body, created_at")
+      .eq("customer_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("appointments")
+      .select("id, start_at, status, services(name), staff(full_name)")
+      .eq("customer_id", id)
+      .is("deleted_at", null)
+      .order("start_at", { ascending: false })
+      .limit(50),
+    supabase
+      .from("customer_packages")
+      .select("id, name, sessions_total, sessions_used, expires_at, status")
+      .eq("customer_id", id)
+      .is("deleted_at", null)
+      .order("purchased_at", { ascending: false }),
+    supabase
+      .from("packages")
+      .select("id, name")
+      .is("deleted_at", null)
+      .eq("is_active", true)
+      .order("name"),
+    supabase
+      .from("payments")
+      .select("receipt_no, amount, paid_at")
+      .eq("customer_id", id)
+      .is("deleted_at", null)
+      .order("paid_at", { ascending: false }),
+    supabase
+      .from("customer_consents")
+      .select("id, title, version, granted_at")
+      .eq("customer_id", id)
+      .order("granted_at", { ascending: false }),
+    supabase
+      .from("consent_templates")
+      .select("id, name")
+      .is("deleted_at", null)
+      .eq("is_active", true)
+      .order("name"),
+    supabase
+      .from("customer_anamnesis")
+      .select(
+        "version, allergies, chronic_conditions, medications, pregnancy, fitzpatrick, skin_type, contraindications, notes",
+      )
+      .eq("customer_id", id)
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("treatment_records")
+      .select(
+        "id, area, performed_at, soap_assessment, parameters, procedure_types(name), staff(full_name), treatment_product_usage(quantity, products(name, unit))",
+      )
+      .eq("customer_id", id)
+      .is("deleted_at", null)
+      .order("performed_at", { ascending: false }),
+    supabase
+      .from("procedure_types")
+      .select("id, name, parameter_schema")
+      .is("deleted_at", null)
+      .eq("is_active", true)
+      .order("name"),
+    supabase
+      .from("staff")
+      .select("id, full_name")
+      .is("deleted_at", null)
+      .eq("is_active", true)
+      .order("full_name"),
+    supabase
+      .from("products")
+      .select("id, name, unit")
+      .is("deleted_at", null)
+      .eq("category", "consumable")
+      .eq("is_active", true)
+      .order("name"),
+    supabase
+      .from("product_batches")
+      .select("id, product_id, batch_no, expiry_date, quantity")
+      .is("deleted_at", null)
+      .gt("quantity", 0)
+      .order("expiry_date", { ascending: true, nullsFirst: false }),
+    supabase
+      .from("treatment_photos")
+      .select("id, kind, storage_path, caption, taken_at")
+      .eq("customer_id", id)
+      .is("deleted_at", null)
+      .order("taken_at", { ascending: false }),
+  ]);
 
   const receipts = Object.values(
     (payments ?? []).reduce<
@@ -136,78 +209,13 @@ export default async function CustomerProfilePage({
     maximumFractionDigits: 0,
   });
 
-  const { data: consents } = await supabase
-    .from("customer_consents")
-    .select("id, title, version, granted_at")
-    .eq("customer_id", id)
-    .order("granted_at", { ascending: false });
-
-  const { data: consentTemplates } = await supabase
-    .from("consent_templates")
-    .select("id, name")
-    .is("deleted_at", null)
-    .eq("is_active", true)
-    .order("name");
-
-  const { data: anamnesis } = await supabase
-    .from("customer_anamnesis")
-    .select(
-      "version, allergies, chronic_conditions, medications, pregnancy, fitzpatrick, skin_type, contraindications, notes",
-    )
-    .eq("customer_id", id)
-    .order("version", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
   const flags: string[] = [];
   if (anamnesis?.allergies) flags.push("Alerji");
   if (anamnesis?.pregnancy) flags.push("Gebelik");
   if (anamnesis?.contraindications) flags.push("Kontrendikasyon");
 
-  const { data: treatments } = await supabase
-    .from("treatment_records")
-    .select(
-      "id, area, performed_at, soap_assessment, parameters, procedure_types(name), staff(full_name), treatment_product_usage(quantity, products(name, unit))",
-    )
-    .eq("customer_id", id)
-    .is("deleted_at", null)
-    .order("performed_at", { ascending: false });
-
-  const { data: procTypes } = await supabase
-    .from("procedure_types")
-    .select("id, name, parameter_schema")
-    .is("deleted_at", null)
-    .eq("is_active", true)
-    .order("name");
-
-  const { data: clinicStaff } = await supabase
-    .from("staff")
-    .select("id, full_name")
-    .is("deleted_at", null)
-    .eq("is_active", true)
-    .order("full_name");
-
   // Sarf malzeme + lot (klinik kayıttan stok düşümü için) — yalnız stoğu olan lotlar
-  const [{ data: invProducts }, { data: invBatches }] = await Promise.all([
-    supabase
-      .from("products")
-      .select("id, name, unit")
-      .is("deleted_at", null)
-      .eq("category", "consumable")
-      .eq("is_active", true)
-      .order("name"),
-    supabase
-      .from("product_batches")
-      .select("id, product_id, batch_no, expiry_date, quantity")
-      .is("deleted_at", null)
-      .gt("quantity", 0)
-      .order("expiry_date", { ascending: true, nullsFirst: false }),
-  ]);
-
-  const batchByProduct = new Map<
-    string,
-    { id: string; label: string }[]
-  >();
+  const batchByProduct = new Map<string, { id: string; label: string }[]>();
   for (const b of invBatches ?? []) {
     const exp = b.expiry_date
       ? ` · SKT ${dateFmt.format(new Date(b.expiry_date))}`
@@ -225,13 +233,6 @@ export default async function CustomerProfilePage({
       batches: batchByProduct.get(p.id) ?? [],
     }))
     .filter((p) => p.batches.length > 0);
-
-  const { data: photoRows } = await supabase
-    .from("treatment_photos")
-    .select("id, kind, storage_path, caption, taken_at")
-    .eq("customer_id", id)
-    .is("deleted_at", null)
-    .order("taken_at", { ascending: false });
 
   // Özel bucket → yalnız imzalı URL ile okunur (1 saat geçerli)
   const signedUrl = new Map<string, string>();
