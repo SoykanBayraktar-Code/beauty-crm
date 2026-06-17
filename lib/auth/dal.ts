@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { OrgRole } from "@/lib/types";
 
 export type Membership = {
+  member_id: string;
   org_id: string;
   role: OrgRole;
   organizations: { name: string } | null;
@@ -30,7 +31,7 @@ export const getMembership = cache(async (): Promise<Membership | null> => {
   // verebilir (yetki kararı bozulması). Mutlaka kendi satırımıza bağla + deterministik sırala.
   const { data } = await supabase
     .from("org_members")
-    .select("org_id, role, organizations(name)")
+    .select("member_id:id, org_id, role, organizations(name)")
     .eq("user_id", user.id)
     .is("deleted_at", null)
     .order("created_at", { ascending: true })

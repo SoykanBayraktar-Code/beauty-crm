@@ -80,6 +80,8 @@ export default async function CustomerProfilePage({
   const { id } = await params;
   const membership = await requireMembership();
   const isOwner = membership.role === "owner";
+  const canWriteClinical =
+    membership.role === "owner" || membership.role === "specialist";
   const supabase = await createClient();
 
   const { data: customer } = await supabase
@@ -406,7 +408,7 @@ export default async function CustomerProfilePage({
                   grants={grants}
                 />
               ) : null}
-              {(procTypes ?? []).length > 0 ? (
+              {canWriteClinical && (procTypes ?? []).length > 0 ? (
                 <div className="flex justify-end">
                   <ClinicalRecordDialog
                     customerId={id}
@@ -420,11 +422,11 @@ export default async function CustomerProfilePage({
                     }))}
                   />
                 </div>
-              ) : (
+              ) : canWriteClinical ? (
                 <p className="text-muted-foreground text-sm">
                   Önce Hizmetler&apos;den işlem türü tanımlayın.
                 </p>
-              )}
+              ) : null}
               {(treatments ?? []).length === 0 ? (
                 <p className="text-muted-foreground text-sm">
                   Henüz klinik kayıt yok.
