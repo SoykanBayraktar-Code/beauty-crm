@@ -540,6 +540,69 @@ export async function grantClinicalAccess(
   return { ok: true };
 }
 
+// ── KVKK veri-sahibi araçları (owner-only) ──
+
+/** Unutulma hakkı (yumuşak): kimlik bilgilerini siler, klinik/finans kaydı yasal
+ *  saklama için kalır ama kişi tanımlanamaz hale gelir. */
+export async function anonymizeCustomer(formData: FormData) {
+  const m = await requireMembership();
+  if (m.role !== "owner") return;
+  const id = clean(formData.get("id"));
+  if (!id) return;
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("customers")
+    .update({
+      full_name: "Anonimleştirilmiş Müşteri",
+      phone: null,
+      email: null,
+      birth_date: null,
+      gender: null,
+      source: null,
+      tags: [],
+      notes: "[KVKK kapsamında anonimleştirildi]",
+    })
+    .eq("id", id);
+  if (error) return;
+  // Serbest-metin PII içeren notları maskele
+  await supabase
+    .from("customer_notes")
+    .update({ body: "[anonimleştirildi]" })
+    .eq("customer_id", id);
+
+  await logAudit("customer.anonymize", "customer", id, {});
+  revalidatePath("/musteriler");
+  revalidatePath(`/musteriler/${id}`);
+}
+
+/** Unutulma hakkı (tam): müşteriyi ve tüm ilişkili kayıtları kalıcı siler (cascade) +
+ *  Storage fotoğraflarını kaldırır. Geri alınamaz. */
+export async function deleteCustomerPermanently(formData: FormData) {
+  const m = await requireMembership();
+  if (m.role !== "owner") return;
+  const id = clean(formData.get("id"));
+  if (!id) return;
+
+  const supabase = await createClient();
+  // Storage fotoğraf yollarını sil (cascade DB satırını siler ama dosyayı silmez)
+  const { data: photos } = await supabase
+    .from("treatment_photos")
+    .select("storage_path")
+    .eq("customer_id", id);
+  const paths = (photos ?? []).map((p) => p.storage_path).filter(Boolean);
+  if (paths.length)
+    await supabase.storage.from(PHOTO_BUCKET).remove(paths);
+
+  // Audit'i silmeden ÖNCE yaz (entity_id sonra kalır)
+  await logAudit("customer.delete_permanent", "customer", id, {
+    photos: paths.length,
+  });
+
+  await supabase.from("customers").delete().eq("id", id); // cascade tüm ilişkili kayıtlar
+  revalidatePath("/musteriler");
+}
+
 // ── Kaydedilmiş segmentler (gelişmiş filtre) ──
 export async function saveSegment(
   _prev: CustomerState,

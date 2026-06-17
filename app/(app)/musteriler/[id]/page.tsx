@@ -20,6 +20,7 @@ import {
   ClinicalAccessManager,
   type Grant,
 } from "@/components/customers/clinical-access-manager";
+import { KvkkActions } from "@/components/customers/kvkk-actions";
 import { PhotoUploadDialog } from "@/components/customers/photo-upload-dialog";
 import {
   PhotoGallery,
@@ -360,7 +361,7 @@ export default async function CustomerProfilePage({
           <TabsTrigger value="notlar">Notlar</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="genel">
+        <TabsContent value="genel" className="space-y-4">
           <Card>
             <CardContent className="grid grid-cols-2 gap-4 py-5 sm:grid-cols-3">
               <Field label="Telefon" value={customer.phone ?? "—"} />
@@ -384,6 +385,9 @@ export default async function CustomerProfilePage({
               <Field label="Kaynak" value={customer.source ?? "—"} />
             </CardContent>
           </Card>
+          {isOwner ? (
+            <KvkkActions customerId={id} customerName={customer.full_name} />
+          ) : null}
         </TabsContent>
 
         <TabsContent value="anamnez">
