@@ -540,6 +540,50 @@ export async function grantClinicalAccess(
   return { ok: true };
 }
 
+// ── Kaydedilmiş segmentler (gelişmiş filtre) ──
+export async function saveSegment(
+  _prev: CustomerState,
+  formData: FormData,
+): Promise<CustomerState> {
+  const m = await requireMembership();
+  const user = await getUser();
+  const name = String(formData.get("name") ?? "").trim();
+  if (name.length < 2) return { error: "Segment adı en az 2 karakter olmalı." };
+
+  let criteria: Record<string, unknown> = {};
+  try {
+    const parsed = JSON.parse(String(formData.get("criteria") ?? "{}"));
+    if (parsed && typeof parsed === "object") criteria = parsed;
+  } catch {
+    return { error: "Filtre kriteri okunamadı." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("segments").insert({
+    org_id: m.org_id,
+    name,
+    criteria,
+    created_by: user?.id ?? null,
+  });
+  if (error) return { error: error.message };
+
+  await logAudit("segment.save", "segment", null, { name });
+  revalidatePath("/musteriler");
+  return { ok: true };
+}
+
+export async function deleteSegment(formData: FormData) {
+  await requireMembership();
+  const id = clean(formData.get("id"));
+  if (!id) return;
+  const supabase = await createClient();
+  await supabase
+    .from("segments")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id);
+  revalidatePath("/musteriler");
+}
+
 export async function revokeClinicalAccess(formData: FormData) {
   const m = await requireMembership();
   if (m.role !== "owner") return;
