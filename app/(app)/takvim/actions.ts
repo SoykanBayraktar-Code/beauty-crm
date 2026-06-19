@@ -72,7 +72,9 @@ export async function createAppointment(
   return { ok: true };
 }
 
-export async function updateAppointmentStatus(formData: FormData) {
+export async function updateAppointmentStatus(
+  formData: FormData,
+): Promise<ApptState> {
   await requireMembership();
   const id = clean(formData.get("id"));
   const status = clean(formData.get("status"));
@@ -85,9 +87,22 @@ export async function updateAppointmentStatus(formData: FormData) {
     "no_show",
     "cancelled",
   ];
-  if (!id || !status || !valid.includes(status)) return;
+  if (!id || !status || !valid.includes(status))
+    return { error: "Geçersiz durum." };
 
   const supabase = await createClient();
-  await supabase.from("appointments").update({ status }).eq("id", id);
+  // M2: yalnız aktif (silinmemiş) randevu güncellenir → silinmiş randevu
+  // 'completed'a çekilip paket seansını yanlışça düşürmesin. Hata da yutulmaz.
+  const { error } = await supabase
+    .from("appointments")
+    .update({ status })
+    .eq("id", id)
+    .is("deleted_at", null);
+  if (error) {
+    if (error.code === "23P01")
+      return { error: "Bu uzmanın o saatte başka randevusu var (çakışma)." };
+    return { error: error.message };
+  }
   revalidatePath("/takvim");
+  return { ok: true };
 }

@@ -78,7 +78,11 @@ export function AppointmentBlock({
       const fd = new FormData();
       fd.set("id", id);
       fd.set("status", s);
-      await updateAppointmentStatus(fd);
+      const res = await updateAppointmentStatus(fd);
+      if (res?.error) {
+        alert(res.error);
+        return;
+      }
       router.refresh();
     });
   };

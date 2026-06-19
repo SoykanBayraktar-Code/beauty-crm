@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
   const { data } = await supabase
     .from("customers")
     .select("id, full_name, phone")
+    .eq("org_id", membership.org_id)
     .is("deleted_at", null)
     .or(`full_name.ilike.%${q}%,phone.ilike.%${q}%`)
     .limit(8);

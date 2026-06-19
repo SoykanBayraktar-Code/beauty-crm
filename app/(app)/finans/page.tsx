@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CashRegister, type OpenSession } from "@/components/finance/cash-register";
 import { ExpenseFormDialog } from "@/components/finance/expense-form-dialog";
 import { ExpenseList, type ExpenseView } from "@/components/finance/expense-list";
+import { istanbulMonthStart } from "@/lib/date";
 
 const tl = new Intl.NumberFormat("tr-TR", {
   style: "currency",
@@ -42,19 +43,15 @@ export default async function FinansPage() {
     const { data: cp } = await supabase
       .from("payments")
       .select("amount")
+      .eq("org_id", membership.org_id)
       .eq("method", "cash")
       .gte("paid_at", openSession.opened_at)
       .is("deleted_at", null);
     cashSales = sum(cp);
   }
 
-  // Özet + Gider (owner/muhasebe)
-  const monthStart = (() => {
-    const d = new Date();
-    return new Date(d.getFullYear(), d.getMonth(), 1);
-  })();
-  const monthStartIso = monthStart.toISOString();
-  const monthStartDate = monthStartIso.slice(0, 10);
+  // Özet + Gider (owner/muhasebe). Ay sınırı Istanbul-saatine göre (M4).
+  const { iso: monthStartIso, date: monthStartDate } = istanbulMonthStart();
 
   let monthRevenue = 0;
   const byMethod: Record<string, number> = {};
@@ -66,11 +63,13 @@ export default async function FinansPage() {
       supabase
         .from("payments")
         .select("amount, method")
+        .eq("org_id", membership.org_id)
         .gte("paid_at", monthStartIso)
         .is("deleted_at", null),
       supabase
         .from("expenses")
         .select("id, category, amount, spent_on, note")
+        .eq("org_id", membership.org_id)
         .gte("spent_on", monthStartDate)
         .is("deleted_at", null)
         .order("spent_on", { ascending: false }),
