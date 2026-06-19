@@ -55,10 +55,36 @@ export async function closeCashSession(
   const counted = Math.max(0, num(formData.get("counted_amount")));
 
   const supabase = await createClient();
+
+  // M12: kapanış mutabakatını kalıcılaştır — beklenen = açılış float + oturum
+  // boyunca nakit satış. Sapma (counted - expected) denetlenebilir kalır.
+  const { data: session } = await supabase
+    .from("cash_sessions")
+    .select("opening_float, opened_at")
+    .eq("id", sessionId)
+    .is("closed_at", null)
+    .maybeSingle();
+  if (!session) return { error: "Açık kasa bulunamadı." };
+
+  const { data: cashPays } = await supabase
+    .from("payments")
+    .select("amount")
+    .eq("org_id", m.org_id)
+    .eq("method", "cash")
+    .gte("paid_at", session.opened_at)
+    .is("deleted_at", null);
+  const cashSales = (cashPays ?? []).reduce(
+    (s, p) => s + Number(p.amount ?? 0),
+    0,
+  );
+  const expected =
+    Math.round((Number(session.opening_float) + cashSales) * 100) / 100;
+
   const { error } = await supabase
     .from("cash_sessions")
     .update({
       counted_amount: counted,
+      expected_amount: expected,
       closed_by: user?.id ?? null,
       closed_at: new Date().toISOString(),
       note: clean(formData.get("note")),
@@ -67,7 +93,11 @@ export async function closeCashSession(
     .is("closed_at", null);
   if (error) return { error: error.message };
 
-  await logAudit("cash.close", "cash_session", sessionId, { counted });
+  await logAudit("cash.close", "cash_session", sessionId, {
+    counted,
+    expected,
+    variance: Math.round((counted - expected) * 100) / 100,
+  });
   revalidatePath("/finans");
   return { ok: true };
 }
@@ -103,10 +133,14 @@ export async function deleteExpense(formData: FormData) {
   const id = clean(formData.get("id"));
   if (!id) return;
   const supabase = await createClient();
-  await supabase
+  const { error } = await supabase
     .from("expenses")
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", id);
+  if (error) {
+    console.error("[deleteExpense] silme hatası:", error.message);
+    return;
+  }
   await logAudit("expense.delete", "expense", id, {});
   revalidatePath("/finans");
 }

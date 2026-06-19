@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireMembership, getUser } from "@/lib/auth/dal";
 import { logAudit } from "@/lib/audit";
+import { MAX_PHOTO_BYTES, PHOTO_MIME, SNIFF_MIME, sniffImage } from "@/lib/image";
 
 const customerSchema = z.object({
   full_name: z.string().trim().min(2, "Ad soyad en az 2 karakter olmalı."),
@@ -293,8 +294,7 @@ export async function createTreatmentRecord(
   _prev: CustomerState,
   formData: FormData,
 ): Promise<CustomerState> {
-  const m = await requireMembership();
-  const user = await getUser();
+  await requireMembership();
   const customerId = clean(formData.get("customer_id"));
   if (!customerId) return { error: "Müşteri gerekli." };
 
@@ -317,67 +317,39 @@ export async function createTreatmentRecord(
     }
   }
 
-  const { data: record, error } = await supabase
-    .from("treatment_records")
-    .insert({
-      org_id: m.org_id,
-      customer_id: customerId,
-      procedure_type_id: procedureTypeId,
-      staff_id: clean(formData.get("staff_id")),
-      area: clean(formData.get("area")),
-      soap_subjective: clean(formData.get("soap_subjective")),
-      soap_objective: clean(formData.get("soap_objective")),
-      soap_assessment: clean(formData.get("soap_assessment")),
-      soap_plan: clean(formData.get("soap_plan")),
-      parameters,
-      created_by: user?.id ?? null,
-    })
-    .select("id")
-    .single();
-  if (error || !record) return { error: error?.message ?? "Kayıt başarısız." };
-
-  // Kullanılan sarf malzeme + lot → tetikleyici stok düşer (lot izlenebilirliği)
-  const usageRows: {
-    org_id: string;
-    treatment_record_id: string;
-    product_id: string;
-    batch_id: string;
-    quantity: number;
-    created_by: string | null;
-  }[] = [];
+  // Kullanılan sarf malzeme + lot satırlarını topla.
+  const usage: { product_id: string; batch_id: string; quantity: number }[] = [];
   for (let i = 0; i < 6; i++) {
     const productId = clean(formData.get(`usage_product_${i}`));
     const batchId = clean(formData.get(`usage_batch_${i}`));
     const q = Number(String(formData.get(`usage_qty_${i}`) ?? "").replace(",", "."));
     if (productId && batchId && Number.isFinite(q) && q > 0) {
-      usageRows.push({
-        org_id: m.org_id,
-        treatment_record_id: record.id,
-        product_id: productId,
-        batch_id: batchId,
-        quantity: q,
-        created_by: user?.id ?? null,
-      });
+      usage.push({ product_id: productId, batch_id: batchId, quantity: q });
     }
   }
 
-  if (usageRows.length > 0) {
-    const { error: usageErr } = await supabase
-      .from("treatment_product_usage")
-      .insert(usageRows);
-    if (usageErr) {
-      // Stok düşümü başarısızsa (örn. lotta yeterli yok) kaydı geri al
-      await supabase
-        .from("treatment_records")
-        .update({ deleted_at: new Date().toISOString() })
-        .eq("id", record.id);
-      return { error: usageErr.message };
-    }
-  }
+  // H2: klinik kayıt + stok kullanımı TEK transaction (record_treatment RPC).
+  // usage patlarsa (örn. yetersiz stok) treatment_records insert'i de geri alınır
+  // → stoktan düşmemiş "fantom" SOAP kaydı oluşmaz.
+  const { data: recordId, error } = await supabase.rpc("record_treatment", {
+    p_customer_id: customerId,
+    p_procedure_type_id: procedureTypeId,
+    p_staff_id: clean(formData.get("staff_id")),
+    p_area: clean(formData.get("area")),
+    p_soap: {
+      subjective: clean(formData.get("soap_subjective")),
+      objective: clean(formData.get("soap_objective")),
+      assessment: clean(formData.get("soap_assessment")),
+      plan: clean(formData.get("soap_plan")),
+    },
+    p_parameters: parameters,
+    p_usage: usage,
+  });
+  if (error || !recordId) return { error: error?.message ?? "Kayıt başarısız." };
 
   await logAudit("treatment.create", "customer", customerId, {
     procedure_type_id: procedureTypeId,
-    products: usageRows.length,
+    products: usage.length,
   });
   revalidatePath(`/musteriler/${customerId}`);
   revalidatePath("/stok");
@@ -385,36 +357,6 @@ export async function createTreatmentRecord(
 }
 
 const PHOTO_BUCKET = "treatment-photos";
-const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
-const PHOTO_MIME: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-};
-const SNIFF_MIME: Record<"jpg" | "png" | "webp", string> = {
-  jpg: "image/jpeg",
-  png: "image/png",
-  webp: "image/webp",
-};
-
-/** Client'ın bildirdiği MIME sahteci olabilir → gerçek baytlardan tür çıkar. */
-function sniffImage(b: Uint8Array): "jpg" | "png" | "webp" | null {
-  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff)
-    return "jpg";
-  if (
-    b.length >= 8 &&
-    b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47 &&
-    b[4] === 0x0d && b[5] === 0x0a && b[6] === 0x1a && b[7] === 0x0a
-  )
-    return "png";
-  if (
-    b.length >= 12 &&
-    b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && // RIFF
-    b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50 // WEBP
-  )
-    return "webp";
-  return null;
-}
 
 export async function uploadTreatmentPhoto(
   _prev: CustomerState,
@@ -544,11 +486,13 @@ export async function grantClinicalAccess(
 
 /** Unutulma hakkı (yumuşak): kimlik bilgilerini siler, klinik/finans kaydı yasal
  *  saklama için kalır ama kişi tanımlanamaz hale gelir. */
-export async function anonymizeCustomer(formData: FormData) {
+export async function anonymizeCustomer(
+  formData: FormData,
+): Promise<CustomerState> {
   const m = await requireMembership();
-  if (m.role !== "owner") return;
+  if (m.role !== "owner") return { error: "Yalnız yönetici yapabilir." };
   const id = clean(formData.get("id"));
-  if (!id) return;
+  if (!id) return { error: "Müşteri gerekli." };
 
   const supabase = await createClient();
   const { error } = await supabase
@@ -564,25 +508,29 @@ export async function anonymizeCustomer(formData: FormData) {
       notes: "[KVKK kapsamında anonimleştirildi]",
     })
     .eq("id", id);
-  if (error) return;
+  if (error) return { error: error.message };
   // Serbest-metin PII içeren notları maskele
-  await supabase
+  const { error: nErr } = await supabase
     .from("customer_notes")
     .update({ body: "[anonimleştirildi]" })
     .eq("customer_id", id);
+  if (nErr) return { error: nErr.message };
 
   await logAudit("customer.anonymize", "customer", id, {});
   revalidatePath("/musteriler");
   revalidatePath(`/musteriler/${id}`);
+  return { ok: true };
 }
 
 /** Unutulma hakkı (tam): müşteriyi ve tüm ilişkili kayıtları kalıcı siler (cascade) +
  *  Storage fotoğraflarını kaldırır. Geri alınamaz. */
-export async function deleteCustomerPermanently(formData: FormData) {
+export async function deleteCustomerPermanently(
+  formData: FormData,
+): Promise<CustomerState> {
   const m = await requireMembership();
-  if (m.role !== "owner") return;
+  if (m.role !== "owner") return { error: "Yalnız yönetici yapabilir." };
   const id = clean(formData.get("id"));
-  if (!id) return;
+  if (!id) return { error: "Müşteri gerekli." };
 
   const supabase = await createClient();
   // Storage fotoğraf yollarını sil (cascade DB satırını siler ama dosyayı silmez)
@@ -591,16 +539,40 @@ export async function deleteCustomerPermanently(formData: FormData) {
     .select("storage_path")
     .eq("customer_id", id);
   const paths = (photos ?? []).map((p) => p.storage_path).filter(Boolean);
-  if (paths.length)
-    await supabase.storage.from(PHOTO_BUCKET).remove(paths);
+  if (paths.length) {
+    const { error: rmErr } = await supabase.storage
+      .from(PHOTO_BUCKET)
+      .remove(paths);
+    // M5/KVKK: dosyalar silinemezse cascade DB silmeyi YAPMA — aksi halde
+    // silinmesi gereken kişisel-veri fotoğrafları yetim kalır (KVKK ihlali).
+    if (rmErr) {
+      await logAudit("customer.delete_permanent_failed", "customer", id, {
+        error: rmErr.message,
+        photos: paths.length,
+      });
+      return {
+        error: `Fotoğraflar silinemedi (${rmErr.message}). İşlem durduruldu, tekrar deneyin.`,
+      };
+    }
+  }
 
   // Audit'i silmeden ÖNCE yaz (entity_id sonra kalır)
   await logAudit("customer.delete_permanent", "customer", id, {
     photos: paths.length,
   });
 
-  await supabase.from("customers").delete().eq("id", id); // cascade tüm ilişkili kayıtlar
+  const { error: delErr } = await supabase
+    .from("customers")
+    .delete()
+    .eq("id", id); // cascade tüm ilişkili kayıtlar
+  if (delErr) {
+    await logAudit("customer.delete_permanent_failed", "customer", id, {
+      error: delErr.message,
+    });
+    return { error: delErr.message };
+  }
   revalidatePath("/musteriler");
+  return { ok: true };
 }
 
 // ── Kaydedilmiş segmentler (gelişmiş filtre) ──

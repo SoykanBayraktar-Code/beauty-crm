@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # Hızlı statik kontroller — Supabase gerektirmez.
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      # NOT: Repoda önceden var olan lint borcu var (react-hooks/set-state-in-effect
+      # kuralı mevcut dialog component'lerinde tetikleniyor) — bu güvenlik-hardening
+      # turunun kapsamı dışı. Lint raporlanır ama CI'ı bloklamaz; borç temizlenince
+      # continue-on-error kaldırılmalı.
+      - run: npm run lint
+        continue-on-error: true
+
+  # Entegrasyon testleri — gerçek lokal Supabase stack'ine (RLS dahil) karşı koşar.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      # Stack'i başlat (config.toml + supabase/migrations otomatik uygulanır).
+      # Migration'larda hata varsa bu adım patlar → CI yakalar.
+      - run: supabase start
+      # Testler 127.0.0.1:54321 + standart lokal demo anahtarlarını kullanır
+      # (tests/helpers/clients.ts). Bunlar supabase start defaultlarıyla eşleşir.
+      - run: npm ci
+      - run: npm test
+      - if: always()
+        run: supabase stop

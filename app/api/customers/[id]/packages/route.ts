@@ -18,6 +18,7 @@ export async function GET(
     .from("customer_packages")
     .select("id, name, sessions_total, sessions_used")
     .eq("customer_id", id)
+    .eq("org_id", membership.org_id)
     .eq("status", "active")
     .is("deleted_at", null)
     .order("purchased_at", { ascending: false });

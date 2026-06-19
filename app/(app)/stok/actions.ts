@@ -53,10 +53,11 @@ export async function deleteSupplier(formData: FormData) {
   const id = clean(formData.get("id"));
   if (!id) return;
   const supabase = await createClient();
-  await supabase
+  const { error } = await supabase
     .from("suppliers")
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", id);
+  if (error) console.error("[deleteSupplier] silme hatası:", error.message);
   revalidatePath("/stok");
 }
 
@@ -97,10 +98,11 @@ export async function deleteProduct(formData: FormData) {
   const id = clean(formData.get("id"));
   if (!id) return;
   const supabase = await createClient();
-  await supabase
+  const { error } = await supabase
     .from("products")
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", id);
+  if (error) console.error("[deleteProduct] silme hatası:", error.message);
   revalidatePath("/stok");
 }
 
@@ -138,9 +140,10 @@ export async function deleteBatch(formData: FormData) {
   const id = clean(formData.get("id"));
   if (!id) return;
   const supabase = await createClient();
-  await supabase
+  const { error } = await supabase
     .from("product_batches")
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", id);
+  if (error) console.error("[deleteBatch] silme hatası:", error.message);
   revalidatePath("/stok");
 }

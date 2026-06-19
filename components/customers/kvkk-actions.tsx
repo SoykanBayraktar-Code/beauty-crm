@@ -31,7 +31,11 @@ export function KvkkActions({
     const fd = new FormData();
     fd.set("id", customerId);
     start(async () => {
-      await anonymizeCustomer(fd);
+      const res = await anonymizeCustomer(fd);
+      if (res?.error) {
+        alert(res.error);
+        return;
+      }
       router.refresh();
     });
   }
@@ -48,7 +52,11 @@ export function KvkkActions({
     const fd = new FormData();
     fd.set("id", customerId);
     start(async () => {
-      await deleteCustomerPermanently(fd);
+      const res = await deleteCustomerPermanently(fd);
+      if (res?.error) {
+        alert(res.error);
+        return;
+      }
       router.push("/musteriler");
     });
   }

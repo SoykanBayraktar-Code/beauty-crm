@@ -17,10 +17,13 @@ export async function GET(
   const { id } = await params;
   const supabase = await createClient();
 
+  // Savunma derinliği: RLS'e ek olarak org sahipliğini kod düzeyinde de doğrula.
+  // Müşteri çağıranın org'una ait değilse 404 (IDOR koruması).
   const { data: customer } = await supabase
     .from("customers")
     .select("*")
     .eq("id", id)
+    .eq("org_id", membership.org_id)
     .maybeSingle();
   if (!customer) {
     return NextResponse.json({ error: "Müşteri bulunamadı" }, { status: 404 });

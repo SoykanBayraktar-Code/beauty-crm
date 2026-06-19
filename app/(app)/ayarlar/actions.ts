@@ -94,27 +94,21 @@ export async function inviteMember(
     };
   }
 
-  const { data: member, error: mErr } = await admin
-    .from("org_members")
-    .insert({ org_id: m.org_id, user_id: created.user.id, role })
-    .select("id")
-    .single();
-  if (mErr || !member) {
+  // org_members + staff insert'i tek transaction'da, DB-tarafı SECURITY DEFINER
+  // RPC ile (owner doğrulaması DB içinde tekrarlanır → admin client baypasına
+  // güvenilmez). Admin client artık yalnız auth kullanıcısı oluşturma/geri alma için.
+  const supabase = await createClient();
+  const { data: memberId, error: rpcErr } = await supabase.rpc(
+    "invite_org_member",
+    { p_user_id: created.user.id, p_role: role, p_full_name: fullName },
+  );
+  if (rpcErr || !memberId) {
+    // Üyelik açılamadı → yetim auth kullanıcısını geri al.
     await admin.auth.admin.deleteUser(created.user.id).catch(() => {});
-    return { error: mErr?.message ?? "Üyelik oluşturulamadı." };
+    return { error: rpcErr?.message ?? "Üyelik oluşturulamadı." };
   }
 
-  const { error: sErr } = await admin
-    .from("staff")
-    .insert({ org_id: m.org_id, member_id: member.id, full_name: fullName });
-  if (sErr) {
-    // Üyelik açıldı ama staff açılamadı → geri al (yetim kullanıcı bırakma)
-    await admin.from("org_members").delete().eq("id", member.id);
-    await admin.auth.admin.deleteUser(created.user.id).catch(() => {});
-    return { error: sErr.message };
-  }
-
-  await logAudit("member.invite", "org_member", member.id, { role, email });
+  await logAudit("member.invite", "org_member", memberId, { role, email });
   revalidatePath("/ayarlar");
   return { ok: true };
 }
