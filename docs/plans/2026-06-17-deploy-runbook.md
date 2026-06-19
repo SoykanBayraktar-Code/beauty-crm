@@ -64,6 +64,16 @@
 
 ---
 
+## 6. Yönetici girişi entegrasyonu (panel.biguzelliklara.com)
+Site (PLAZA PANDA, statik Vite/React, Plesk) ↔ CRM (bu repo, Vercel) **decoupled**. Entegrasyon = siteye tek "Yönetici Girişi" linki + panel alt alanı.
+- [ ] Vercel projesine **`panel.biguzelliklara.com`** domainini ekle (Vercel → Project → Domains).
+- [ ] PLAZA PANDA / domain yöneticisi DNS'e **`CNAME panel → cname.vercel-dns.com`** ekler (bkz. teslim paketi).
+- [ ] Vercel doğrulamayı tamamlar + SSL otomatik.
+- [ ] `panel` alt alanına **`noindex`** (robots meta / X-Robots-Tag) — yönetim paneli arama motorunda çıkmasın.
+- [ ] PLAZA PANDA footer'a `<a href="https://panel.biguzelliklara.com/login" target="_blank" rel="noopener">Yönetici Girişi</a>` ekler.
+- **Teslim paketi:** `docs/plans/2026-06-17-plaza-panda-handoff.md` (PLAZA PANDA'ya gönderilecek; CRM içi sızdırmaz — yalnız 1 DNS + 1 link).
+- **Gizlilik:** PLAZA PANDA'ya yalnız URL geçer; kod/DB/anahtar bizde kapalı.
+
 ## Açık küçük işler (deploy öncesi/sonrası, kod)
 - [ ] Şifre sıfırlama sayfası (`/reset` + `forgotPassword` action) — SMTP'siz lokalde test edilemediği için ertelendi.
 - [ ] E-posta onayı akış sayfası (confirm sonrası yönlendirme).
